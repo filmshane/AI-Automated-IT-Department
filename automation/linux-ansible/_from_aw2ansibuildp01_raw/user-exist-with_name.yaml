@@ -1,0 +1,37 @@
+---
+- name: Search Linux user by info name (GECOS field)
+  hosts: all
+  gather_facts: false
+  become: true
+
+  vars_prompt:
+    - name: username
+      prompt: "Enter the username details to search"
+      private: no
+
+  tasks:
+    - name: Retrieve all user information from the passwd database
+      ansible.builtin.getent:
+        database: passwd
+      register: all_users_data
+
+    - name: Find users matching the search term in the comment field
+      ansible.builtin.set_fact:
+        matching_users: >-
+          {{
+            getent_passwd | dict2items
+            | selectattr('value', 'search', username)
+            | map(attribute='key')
+            | list
+          }}
+
+    - name: Display the found username
+      ansible.builtin.debug:
+        msg: "The username for GECOS name '{{ username }}' is: {{ matching_users }}"
+      when: matching_users | length > 0
+
+    - name: Display a message if no user was found
+      ansible.builtin.debug:
+        msg: "No user found with GECOS name '{{ username }}'."
+      when: matching_users | length == 0
+      

@@ -1,0 +1,53 @@
+---
+# SMB Server Baseline — thin build (use instead of corp OL8/OL9 playbooks)
+# Does NOT install Cylance/BigFix. Optional agents via variables.
+- name: SMB Linux server baseline
+  hosts: linux
+  become: true
+  vars:
+    smb_hostname: "{{ hostname | mandatory }}"
+    smb_ip: "{{ system_ip | default(ansible_default_ipv4.address) }}"
+    smb_domain: "{{ customer_domain | default('example.customer.local') }}"
+    smb_admin_users: []   # list of {name, groups, comment, password_hash}
+    smb_packages_extra: []
+    # smb_admin_users example:
+    # - { name: 'aaiadmin', groups: 'wheel', comment: 'AutomationAI', password_hash: '{{ vault_hash }}' }
+
+  tasks:
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: "{{ smb_hostname }}"
+
+    - name: Hosts file entry
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: "^{{ smb_ip | regex_escape }}\\s+"
+        line: "{{ smb_ip }} {{ smb_hostname }}.{{ smb_domain }} {{ smb_hostname }}"
+        state: present
+
+    - name: Essential packages
+      ansible.builtin.package:
+        name: "{{ ['curl', 'vim', 'rsync', 'chrony'] + smb_packages_extra }}"
+        state: present
+
+    - name: Enable chrony
+      ansible.builtin.service:
+        name: chronyd
+        state: started
+        enabled: true
+      failed_when: false
+
+    - name: Create admin users from vars
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        groups: "{{ item.groups | default('wheel') }}"
+        comment: "{{ item.comment | default('') }}"
+        password: "{{ item.password_hash | default(omit) }}"
+        shell: /bin/bash
+        create_home: true
+      loop: "{{ smb_admin_users }}"
+      when: smb_admin_users | length > 0
+
+    - name: Hint next steps
+      ansible.builtin.debug:
+        msg: "Baseline done. Optional: run ad-join-linux.yaml, then patch_and_verify.yml"

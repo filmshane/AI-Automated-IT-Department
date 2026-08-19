@@ -1,0 +1,58 @@
+---
+- name: Change user passwords (1-3 users) as root on Red Hat, Oracle Linux, Ubuntu
+  hosts: all
+  become: yes
+  become_user: root
+  become_method: sudo
+  gather_facts: yes
+  any_errors_fatal: false
+
+  vars_prompt:
+    - name: plain_password
+      prompt: "Enter the NEW password (same password will be set for all specified users)"
+      private: no
+
+  vars:
+    # Normalize input into a separate variable to avoid recursive loop
+    target_users_input: "{{ target_users | default([]) }}"
+    target_users_list: >-
+      {{ target_users_input | from_yaml if target_users_input is string else target_users_input }}
+
+  tasks:
+    - name: Show OS facts for troubleshooting
+      ansible.builtin.debug:
+        msg: >-
+          Host: {{ inventory_hostname }} |
+          Distribution: {{ ansible_facts.distribution | default('unknown') }} |
+          Version: {{ ansible_facts.distribution_version | default('unknown') }} |
+          OS Family: {{ ansible_facts.os_family | default('unknown') }}
+
+    - name: Validate supported OS family
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family is defined
+          - ansible_facts.os_family in ['RedHat', 'Debian']
+        fail_msg: "Unsupported OS on {{ inventory_hostname }}"
+
+    - name: Validate 1-3 users provided
+      ansible.builtin.assert:
+        that:
+          - target_users_list is defined
+          - target_users_list | length >= 1
+          - target_users_list | length <= 3
+        fail_msg: >-
+          ERROR: Provide 1-3 users like this:
+          -e 'target_users=["user1","user2"]'   (use single quotes around -e)
+
+    - name: Verify users exist in /etc/passwd
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ item }}"
+      loop: "{{ target_users_list }}"
+
+    - name: Set password for each user (visible prompt)
+      ansible.builtin.user:
+        name: "{{ item }}"
+        password: "{{ plain_password | password_hash('sha512') }}"
+        update_password: always
+      loop: "{{ target_users_list }}"

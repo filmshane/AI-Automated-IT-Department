@@ -1,0 +1,9 @@
+---
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - debug:
+        msg: |
+          10 2 * * 0 cd /opt/aai/linux-ansible && ansible-playbook -i inventory/hosts.ini playbooks/patch_and_verify.yml --limit customer_alpha_linux >> /var/log/aai-patch-alpha.log 2>&1
+          0 18 * * 5 cd /opt/aai/linux-ansible && ansible-playbook -i inventory/hosts.ini playbooks/patch_and_verify.yml -e patch_apply=false --limit customer_alpha_linux
+          30 6 * * 1 cd /opt/aai/linux-ansible && ansible-playbook -i inventory/hosts.ini playbooks/host_inventory_report.yml

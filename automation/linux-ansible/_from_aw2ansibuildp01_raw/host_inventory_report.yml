@@ -1,0 +1,116 @@
+---
+- name: Generate host inventory spreadsheet with memory, disk, and CPU info
+  hosts: all
+  gather_facts: true
+  become: false
+
+  tasks:
+    - name: Collect disk information using df
+      shell: |
+        df -h --output=target,size,avail | tail -n +2 | grep -E '^/' | awk '{print $1":"$3}'
+      register: disk_info
+      changed_when: false
+
+    - name: Build host data structure
+      set_fact:
+        host_data:
+          hostname: "{{ inventory_hostname }}"
+          os_type: "{{ ansible_distribution }} {{ ansible_distribution_version }}"
+          total_memory: "{{ (ansible_memtotal_mb / 1024) | round(2) }} GB"
+          memory_free: "{{ (ansible_memfree_mb / 1024) | round(2) }} GB"
+          cpu_count: "{{ ansible_processor_vcpus | default(ansible_processor_count) }}"
+          cpu_type: "{{ ansible_processor[2] if ansible_processor | length > 2 else ansible_processor[0] }}"
+          ip_addresses: "{{ ansible_all_ipv4_addresses | join(', ') }}"
+          disks: "{{ disk_info.stdout_lines | join('; ') }}"
+
+    - name: Add host data to master list on control node
+      delegate_to: localhost
+      delegate_facts: true
+      set_fact:
+        all_hosts: "{{ all_hosts | default([]) + [host_data] }}"
+
+- name: Create Excel spreadsheet from collected data
+  hosts: localhost
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Ensure openpyxl is installed
+      pip:
+        name: openpyxl
+        state: present
+      delegate_to: localhost
+
+    - name: Generate Excel report
+      delegate_to: localhost
+      copy:
+        dest: /tmp/create_host_report.py
+        content: |
+          from openpyxl import Workbook
+          from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+          import json
+
+          hosts = {{ all_hosts | to_json }}
+
+          wb = Workbook()
+          ws = wb.active
+          ws.title = "Host Inventory"
+
+          # Headers
+          headers = [
+              "Hostname", "OS Type", "Total Memory", "Memory Free",
+              "CPU Count", "CPU Type", "IP Addresses", "Disks (mount:free space)"
+          ]
+          header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+          header_font = Font(bold=True, color="FFFFFF")
+          thin_border = Border(
+              left=Side(style='thin'),
+              right=Side(style='thin'),
+              top=Side(style='thin'),
+              bottom=Side(style='thin')
+          )
+
+          for col, header in enumerate(headers, 1):
+              cell = ws.cell(row=1, column=col, value=header)
+              cell.fill = header_fill
+              cell.font = header_font
+              cell.alignment = Alignment(horizontal='center', wrap_text=True)
+              cell.border = thin_border
+
+          # Data rows
+          for row_idx, host in enumerate(hosts, 2):
+              ws.cell(row=row_idx, column=1, value=host.get('hostname', ''))
+              ws.cell(row=row_idx, column=2, value=host.get('os_type', ''))
+              ws.cell(row=row_idx, column=3, value=host.get('total_memory', ''))
+              ws.cell(row=row_idx, column=4, value=host.get('memory_free', ''))
+              ws.cell(row=row_idx, column=5, value=host.get('cpu_count', ''))
+              ws.cell(row=row_idx, column=6, value=host.get('cpu_type', ''))
+              ws.cell(row=row_idx, column=7, value=host.get('ip_addresses', ''))
+              ws.cell(row=row_idx, column=8, value=host.get('disks', ''))
+
+              for col in range(1, 9):
+                  ws.cell(row=row_idx, column=col).border = thin_border
+                  ws.cell(row=row_idx, column=col).alignment = Alignment(wrap_text=True, vertical='top')
+
+          # Set column widths
+          ws.column_dimensions['A'].width = 25
+          ws.column_dimensions['B'].width = 28
+          ws.column_dimensions['C'].width = 14
+          ws.column_dimensions['D'].width = 14
+          ws.column_dimensions['E'].width = 12
+          ws.column_dimensions['F'].width = 35
+          ws.column_dimensions['G'].width = 30
+          ws.column_dimensions['H'].width = 55
+
+          output_file = "/tmp/host_inventory_report.xlsx"
+          wb.save(output_file)
+          print(f"Report saved to: {output_file}")
+
+    - name: Run Python script to create Excel file
+      delegate_to: localhost
+      command: python3 /tmp/create_host_report.py
+      register: excel_result
+
+    - name: Show result
+      debug:
+        msg: "{{ excel_result.stdout }}"

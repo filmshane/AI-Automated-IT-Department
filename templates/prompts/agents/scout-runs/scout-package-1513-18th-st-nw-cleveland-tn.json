@@ -1,0 +1,511 @@
+{
+  "lead_id": "lead-1513-18th-st-nw-cleveland",
+  "property_address": "1513 18th St NW, Cleveland, TN 37311",
+  "status": "awaiting_max_price",
+  "generated_at": "2026-08-13T16:36:15.477376+00:00",
+  "scout_run_id": "run-29d46fc000cb",
+  "source": "alex_call_rerun",
+  "alex_call": {
+    "conversation_id": "conv_4801kzxywheyfhdap6ydhx9k8qvh",
+    "call_date": "2026-08-13",
+    "seller_name": "Shane Miller",
+    "motivation": "divorce; neither party lives there; no longer need property",
+    "timeline": "30-60 days",
+    "ownership": "ex-spouse already signed deed release / deed in advance \u2014 seller represents sole remaining signer path",
+    "walk_away_ask": null,
+    "seller_stated_year_built": 1956,
+    "seller_stated_lot_acres": 0.045,
+    "public_record_year_built": 1965,
+    "public_record_lot_acres": 0.46,
+    "beds_baths_sf": "4/3 ~2680 sf (use GLA 2688 public)",
+    "style": "single-story ranch; garage in basement",
+    "basement": "unfinished; wood paneling; no sheetrock; no carpet",
+    "exterior_recent": [
+      "new roof",
+      "new windows",
+      "exterior paint finishing this week"
+    ],
+    "interior_needs": [
+      "kitchen full redo (old / exterior terracotta tile)",
+      "flooring mixed/hodgepodge \u2014 redo"
+    ],
+    "baths_call": "not flagged as problem on call (2022 listing had updated baths \u2014 verify)",
+    "junk": "seller + ex left junk; wants to know if must clean \u2014 agent said leave it",
+    "ryan_appointment": "Friday 10:00 AM Eastern (call said tomorrow Friday relative to Wed Aug 13 \u2192 2026-08-14 10:00 ET)",
+    "transcript_summary": "Divorce sale, 30-60 day close, ex signed deed. 1513 18th St NW Cleveland TN, 4/3 ~2680sf ranch unfinished basement garage. New roof/windows/paint. Kitchen + floors need work. No cash price. Junk OK to leave. Ryan Fri 10am ET."
+  },
+  "subject": {
+    "beds": 4,
+    "baths": 3.0,
+    "sqft": 2688,
+    "year_built": 1965,
+    "lot_acres": 0.46,
+    "lot_sqft": 20038,
+    "property_type": "Single-Family brick ranch",
+    "garage": "basement garage",
+    "basement": "Full unfinished (wood paneling, no sheetrock/carpet); garage in basement",
+    "features_last_listing": [
+      "hardwood and tile",
+      "3 updated full baths",
+      "kitchen with island",
+      "formal dining + breakfast nook",
+      "sunroom",
+      "corner lot",
+      "near I-75"
+    ],
+    "lat": 35.1771304,
+    "lon": -84.8867932,
+    "redfin_estimate_usd": 422695,
+    "last_sale": {
+      "price_usd": 384000,
+      "date": "2022-09-29",
+      "list_orig_usd": 425000
+    },
+    "prior_sale": {
+      "price_usd": 200000,
+      "date": "2020-02-24"
+    },
+    "sources": [
+      "https://www.redfin.com/TN/Cleveland/1513-18th-St-NW-37311/home/115039089",
+      "https://www.zillow.com/homedetails/1513-18th-St-NW-Cleveland-TN-37311/40863202_zpid/",
+      "OSM nominatim geocode"
+    ],
+    "listing_status": "off_market",
+    "year_built_note": "Public record 1965; seller said 1956 on call \u2014 use public record until verified",
+    "lot_note": "Public record ~0.46 ac corner; seller said ~0.045 on call \u2014 ignore seller lot",
+    "condition_from_call": {
+      "exterior": "new roof, new windows, exterior paint finishing",
+      "kitchen": "needs full redo",
+      "flooring": "mixed/hodgepodge \u2014 redo",
+      "baths": "not flagged bad on call; 2022 listing updated \u2014 verify",
+      "junk": true
+    }
+  },
+  "comps": [
+    {
+      "property_id": 115078232,
+      "address": "1107 Melrose Dr NW, Cleveland, TN 37311",
+      "sold_price": 369900,
+      "sold_date": "2025-10-10",
+      "beds": 4,
+      "baths": 3.0,
+      "sqft": 2434,
+      "year_built": 1980,
+      "ppsf": 152,
+      "distance_mi": 0.64,
+      "url": "https://www.redfin.com/TN/Cleveland/2217-Timber-Trace-Cir-NW-37311/home/115078232",
+      "lat": 35.183931,
+      "lon": -84.8789956,
+      "comp_score": 118.9
+    },
+    {
+      "property_id": 115016731,
+      "address": "1512 Knollwood Dr, Cleveland, TN 37311",
+      "sold_price": 390000,
+      "sold_date": "2024-08-23",
+      "beds": 4,
+      "baths": 2.5,
+      "sqft": 2408,
+      "year_built": 1969,
+      "ppsf": 162,
+      "distance_mi": 0.17,
+      "url": "https://www.redfin.com/TN/Cleveland/1020-Robin-Hood-Dr-NW-37312/home/115016731",
+      "lat": 35.1747116,
+      "lon": -84.8874929,
+      "comp_score": 116.6
+    },
+    {
+      "property_id": 115076744,
+      "address": "2398 Interlackin Cir NW, Cleveland, TN 37312",
+      "sold_price": 415000,
+      "sold_date": "2026-07-13",
+      "beds": 5,
+      "baths": 3.0,
+      "sqft": 2488,
+      "year_built": 1969,
+      "ppsf": 167,
+      "distance_mi": 1.57,
+      "url": "https://www.redfin.com/TN/Cleveland/260-Sequoia-Rd-NW-37312/home/115076744",
+      "lat": 35.1944326,
+      "lon": -84.9048206,
+      "comp_score": 114.5
+    },
+    {
+      "property_id": 114632607,
+      "address": "833 Deer Run Ln NW, Cleveland, TN 37311",
+      "sold_price": 380000,
+      "sold_date": "2024-11-26",
+      "beds": 4,
+      "baths": 3.0,
+      "sqft": 2392,
+      "year_built": 2006,
+      "ppsf": 159,
+      "distance_mi": 0.4,
+      "url": "https://www.redfin.com/TN/Cleveland/220-Hunters-Trce-NW-37312/home/114632607",
+      "lat": 35.173854,
+      "lon": -84.8926325,
+      "comp_score": 113.3
+    },
+    {
+      "property_id": 115071472,
+      "address": "185 Everhart Dr NW, Cleveland, TN 37312",
+      "sold_price": 524500,
+      "sold_date": "2025-08-25",
+      "beds": 4,
+      "baths": 3.0,
+      "sqft": 2484,
+      "year_built": 1977,
+      "ppsf": 211,
+      "distance_mi": 0.75,
+      "url": "https://www.redfin.com/TN/Cleveland/1013-Osment-Rd-SE-37323/home/115071472",
+      "lat": 35.1674774,
+      "lon": -84.8927671,
+      "comp_score": 109.2
+    },
+    {
+      "property_id": 114998276,
+      "address": "210 NW James Ave, Cleveland, TN 37311",
+      "sold_price": 460000,
+      "sold_date": "2024-08-28",
+      "beds": 5,
+      "baths": 3.0,
+      "sqft": 3000,
+      "year_built": 1957,
+      "ppsf": 153,
+      "distance_mi": 0.82,
+      "url": "https://www.redfin.com/TN/Cleveland/630-Gale-Dr-NE-37312/home/114998276",
+      "lat": 35.1653849,
+      "lon": -84.8891814,
+      "comp_score": 107.8
+    },
+    {
+      "property_id": 114846922,
+      "address": "105 Overbriar Dr NW, Cleveland, TN 37312",
+      "sold_price": 485000,
+      "sold_date": "2026-04-06",
+      "beds": 3,
+      "baths": 3.5,
+      "sqft": 2683,
+      "year_built": 1987,
+      "ppsf": 181,
+      "distance_mi": 1.71,
+      "url": "https://www.redfin.com/TN/Cleveland/177-Marshall-Ln-SE-37323/home/114846922",
+      "lat": 35.1833474,
+      "lon": -84.8574537,
+      "comp_score": 104.3
+    },
+    {
+      "property_id": 114703800,
+      "address": "2505 Hickory Dr NW, Cleveland, TN 37311",
+      "sold_price": 340000,
+      "sold_date": "2026-04-13",
+      "beds": 3,
+      "baths": 3.5,
+      "sqft": 2663,
+      "year_built": 1986,
+      "ppsf": 128,
+      "distance_mi": 0.86,
+      "url": "https://www.redfin.com/TN/Cleveland/2009-Laurel-Springs-Dr-NW-37311/home/114703800",
+      "lat": 35.1875415,
+      "lon": -84.878383,
+      "comp_score": 103.8
+    }
+  ],
+  "arv_low": 390000,
+  "arv_high": 445000,
+  "arv_working": 429000,
+  "arv_confidence": "medium-high",
+  "arv_methods": {
+    "median_comp_ppsf_times_gla": 431424,
+    "median_comp_price_size_adjusted": 435205,
+    "redfin_estimate": 422695,
+    "median_selected_comp_price": 402500.0,
+    "median_selected_ppsf": 160.5
+  },
+  "arv_note": "ARV held at $429k from prior Redfin+comp work. Call improves rehab confidence, not ARV set.",
+  "rehab": {
+    "model": "call_line_items_plus_kong_crosscheck",
+    "condition_basis": "Divorce sale, 30-60 day close, ex signed deed. 1513 18th St NW Cleveland TN, 4/3 ~2680sf ranch unfinished basement garage. New roof/windows/paint. Kitchen + floors need work. No cash price. Junk OK to leave. Ryan Fri 10am ET.",
+    "excluded_because_done": [
+      "new roof",
+      "new windows",
+      "exterior paint"
+    ],
+    "line_items_base": [
+      {
+        "item": "Junk-out / debris haul (whole house + basement)",
+        "total_low": 2500,
+        "total_mid": 4500,
+        "total_high": 8000,
+        "notes": "Call: junk left by both parties"
+      },
+      {
+        "item": "Kitchen full gut + remodel (cabinets/counters/appliances/tile)",
+        "total_low": 18000,
+        "total_mid": 28000,
+        "total_high": 42000,
+        "notes": "Call: super old, exterior terracotta tile"
+      },
+      {
+        "item": "Flooring majority GLA (~2016 sf LVP/hard surface install)",
+        "total_low": 9072,
+        "total_mid": 14112,
+        "total_high": 20160,
+        "notes": "Call: mixed/hodgepodge floors"
+      },
+      {
+        "item": "Interior paint touch-up after flooring/kitchen (not full house if exterior done)",
+        "total_low": 2500,
+        "total_mid": 4500,
+        "total_high": 7500,
+        "notes": "Exterior paint finishing; interior may still need after reno"
+      },
+      {
+        "item": "Bath refresh allowance (not full gut \u2014 baths not flagged on call)",
+        "total_low": 3000,
+        "total_mid": 6000,
+        "total_high": 15000,
+        "notes": "2022 listing updated baths; verify walkthrough"
+      },
+      {
+        "item": "Basement clean-out + moisture check only (not finish)",
+        "total_low": 1500,
+        "total_mid": 3000,
+        "total_high": 6000,
+        "notes": "Unfinished; wood paneling; no sheetrock/carpet"
+      },
+      {
+        "item": "Punch electrical/plumbing after kitchen",
+        "total_low": 1500,
+        "total_mid": 3000,
+        "total_high": 6000,
+        "notes": ""
+      },
+      {
+        "item": "Permits / misc / landscaping curb after reno",
+        "total_low": 1000,
+        "total_mid": 2000,
+        "total_high": 4000,
+        "notes": ""
+      }
+    ],
+    "line_items_heavy_extra": [
+      {
+        "item": "Basement finish path (floor/walls/ceiling/conceal plumbing) \u2014 optional ARV upside",
+        "total_low": 25000,
+        "total_mid": 40000,
+        "total_high": 60000,
+        "notes": "Only if buyer finishes basement for retail"
+      },
+      {
+        "item": "Systems contingency (HVAC/electrical unknowns on 1960s ranch)",
+        "total_low": 5000,
+        "total_mid": 10000,
+        "total_high": 20000,
+        "notes": ""
+      }
+    ],
+    "base_before_contingency": {
+      "low": 39072,
+      "medium": 65112,
+      "high_components": 188660
+    },
+    "contingency_pct": {
+      "low": 0.1,
+      "medium": 0.15,
+      "heavy": 0.2
+    },
+    "low": {
+      "estimate_usd": 42979,
+      "confidence": "medium",
+      "scope_bullets": [
+        "Junk-out",
+        "Kitchen gut/remodel",
+        "Majority flooring",
+        "Light interior paint after reno",
+        "Basement clean only \u2014 NO finish",
+        "Roof/windows/paint EXCLUDED (seller just completed)"
+      ],
+      "notes": "Call-confirmed exterior done; still needs kitchen+floors. Lowest credible investor path."
+    },
+    "medium": {
+      "estimate_usd": 74879,
+      "confidence": "medium-high",
+      "scope_bullets": [
+        "All low-scope items at mid pricing",
+        "Bath refresh allowance",
+        "15% contingency",
+        "Default underwriting until walkthrough photos"
+      ],
+      "notes": "DEFAULT after Alex call. Matches stated kitchen+flooring+junk without full basement finish."
+    },
+    "full_gut": {
+      "estimate_usd": 226392,
+      "confidence": "medium",
+      "scope_bullets": [
+        "High kitchen/floors",
+        "Full basement finish path",
+        "Systems contingency",
+        "20% contingency"
+      ],
+      "notes": "Use if walkthrough finds systems/basement finish required for ARV comps.",
+      "label": "heavy_call_plus_basement_finish"
+    },
+    "kong_psf_crosscheck": {
+      "kong_psf_low": {
+        "rehab": 66528,
+        "mao_flip": 233772,
+        "mao_contract": 213772
+      },
+      "kong_psf_medium": {
+        "rehab": 123647,
+        "mao_flip": 176653,
+        "mao_contract": 156653
+      },
+      "kong_psf_heavy": {
+        "rehab": 185472,
+        "mao_flip": 114828,
+        "mao_contract": 94828
+      }
+    },
+    "prior_scout_estimates": {
+      "low": 60480,
+      "medium": 115520,
+      "full_gut": 174560
+    }
+  },
+  "suggested_offer": {
+    "formula": "MAO_flip = ARV*0.70 - rehab; MAO_contract = MAO_flip - assignment_fee - buyer_cushion",
+    "arv_factor": 0.7,
+    "assignment_fee": 15000,
+    "buyer_cushion": 5000,
+    "low": {
+      "mao_flip": 257321,
+      "mao_contract": 237321,
+      "rehab": 42979
+    },
+    "medium": {
+      "mao_flip": 225421,
+      "mao_contract": 205421,
+      "rehab": 74879
+    },
+    "heavy": {
+      "mao_flip": 73908,
+      "mao_contract": 53908,
+      "rehab": 226392
+    },
+    "recommended_case": "medium"
+  },
+  "roi_summary": {
+    "exit_arv": 429000,
+    "medium_purchase_at_mao_contract": 205421,
+    "medium_rehab": 74879,
+    "medium_all_in_approx": 295300,
+    "note": "All-in at contract lock + rehab + your fee vs ARV; 30% band is the flipper cushion."
+  },
+  "risks": [
+    "Seller may still anchor to 2022 sale $384k or online estimates",
+    "Year built / lot size seller statements conflict public record",
+    "Bath condition not verified on call",
+    "Basement unfinished \u2014 finish cost only if required for exit strategy",
+    "Junk volume unknown until walkthrough",
+    "No walk-away number \u2014 negotiation open but also unstructured",
+    "Ryan booked Fri 10am ET \u2014 max_price must be set before quote"
+  ],
+  "alex_notes_used": "Divorce sale, 30-60 day close, ex signed deed. 1513 18th St NW Cleveland TN, 4/3 ~2680sf ranch unfinished basement garage. New roof/windows/paint. Kitchen + floors need work. No cash price. Junk OK to leave. Ryan Fri 10am ET.",
+  "needs_shane_max_price": true,
+  "max_price": null,
+  "recommended_underwriting_case": "medium",
+  "recommended_buyer_walkthrough_focus": [
+    "Kitchen extent (cabinets/layout/plumbing)",
+    "Flooring layers/subfloor",
+    "Baths true condition vs 2022 listing",
+    "Basement moisture and garage layout",
+    "Confirm new roof/windows age/warranties",
+    "Junk volume for haul bid",
+    "Deed/title: confirm ex release recorded"
+  ],
+  "assumptions": [
+    "Classic 70% rule; no double-count profit/closing buffers",
+    "Assignment fee $15k + $5k buyer cushion for contract ceiling",
+    "ARV retained from prior comp work",
+    "Public record wins over seller year/lot misspeaks"
+  ],
+  "deal_math_version": "kong_70_pct_v2_call_rerun",
+  "deal_math_doc": "/home/shanem/FPI-Corp/Docs/DEAL-MATH-KONG-AND-INDUSTRY.md",
+  "worth_it_summary": {
+    "recommended_case": "medium",
+    "narrative": "With call-confirmed condition (new roof/windows/paint; kitchen+floors+junk needed; unfinished basement), default MEDIUM rehab ~$74,879. MAO_flip @ ARV $429,000 \u00d70.70 \u2212 rehab = $225,421. MAO_contract (after $15,000 fee + $5,000 cushion) = $205,421. Worth pursuing if seller can land near that contract ceiling; pass if anchored to 2022 $384,000 retail with no flexibility. Ryan appointment set Fri 10:00 ET \u2014 Shane must set max_price \u2264 MAO_contract before Ryan quotes.",
+    "vs_prior_scout": "Prior medium rehab ~$115\u2013120k assumed unknown condition including possible exterior work. Call removes roof/windows/paint from scope but confirms kitchen gut + flooring + junk-out. Medium rehab stays in similar band via line-items; confidence up because exterior is done."
+  },
+  "deal_recap": {
+    "arv_working": 429000,
+    "fee": 15000,
+    "factor": 0.7,
+    "low": {
+      "rehab_usd": 42979,
+      "confidence": "medium",
+      "mao_flip": 257321,
+      "mao_contract": 237321,
+      "mao_flip_at_arv_low": 230021,
+      "mao_flip_at_arv_high": 268521,
+      "you_lock_seller_max": 237321,
+      "assignment_fee": 15000,
+      "buyer_cushion": 5000,
+      "scope_bullets": [
+        "Junk-out",
+        "Kitchen gut/remodel",
+        "Majority flooring",
+        "Light interior paint after reno",
+        "Basement clean only \u2014 NO finish",
+        "Roof/windows/paint EXCLUDED (seller just completed)"
+      ],
+      "notes": "Call-confirmed exterior done; still needs kitchen+floors. Lowest credible investor path.",
+      "deal_works": true
+    },
+    "medium": {
+      "rehab_usd": 74879,
+      "confidence": "medium-high",
+      "mao_flip": 225421,
+      "mao_contract": 205421,
+      "mao_flip_at_arv_low": 198121,
+      "mao_flip_at_arv_high": 236621,
+      "you_lock_seller_max": 205421,
+      "assignment_fee": 15000,
+      "buyer_cushion": 5000,
+      "scope_bullets": [
+        "All low-scope items at mid pricing",
+        "Bath refresh allowance",
+        "15% contingency",
+        "Default underwriting until walkthrough photos"
+      ],
+      "notes": "DEFAULT after Alex call. Matches stated kitchen+flooring+junk without full basement finish.",
+      "deal_works": true
+    },
+    "heavy": {
+      "rehab_usd": 226392,
+      "confidence": "medium",
+      "mao_flip": 73908,
+      "mao_contract": 53908,
+      "mao_flip_at_arv_low": 46608,
+      "mao_flip_at_arv_high": 85108,
+      "you_lock_seller_max": 53908,
+      "assignment_fee": 15000,
+      "buyer_cushion": 5000,
+      "scope_bullets": [
+        "High kitchen/floors",
+        "Full basement finish path",
+        "Systems contingency",
+        "20% contingency"
+      ],
+      "notes": "Use if walkthrough finds systems/basement finish required for ARV comps.",
+      "deal_works": true
+    }
+  },
+  "tool_errors": [],
+  "data_quality": {
+    "comps": "prior_run_retained",
+    "condition": "alex_call_2026-08-13",
+    "confidence_overall": "medium-high"
+  }
+}

@@ -1,0 +1,242 @@
+================================================================================
+FLEET MONITOR + GRAFANA BOARD — HOWTO
+Control node: aw2ansibuildp01.corp.jitb.net / AW2ANSIBUILDP01.corp.jitb.net (10.4.151.93)
+================================================================================
+
+1) URLS (open in browser)
+--------------------------------------------------------------------------------
+Status board / task board (colored host squares — primary UI)
+
+  By FQDN:
+    http://aw2ansibuildp01.corp.jitb.net:8088/
+    http://AW2ANSIBUILDP01.corp.jitb.net:8088/
+
+  By IP:
+    http://10.4.151.93:8088/
+
+  API (JSON metrics the board uses):
+    http://aw2ansibuildp01.corp.jitb.net:8088/api/hosts
+    http://aw2ansibuildp01.corp.jitb.net:8088/api/host/<short_name>
+    http://aw2ansibuildp01.corp.jitb.net:8088/metrics
+    http://10.4.151.93:8088/api/hosts
+    http://10.4.151.93:8088/api/host/<short_name>
+    http://10.4.151.93:8088/metrics
+
+Grafana web UI
+
+  By FQDN:
+    http://aw2ansibuildp01.corp.jitb.net:3000/
+    http://AW2ANSIBUILDP01.corp.jitb.net:3000/
+
+  By IP:
+    http://10.4.151.93:3000/
+
+Grafana dashboard (Fleet Overview)
+
+  By FQDN:
+    http://aw2ansibuildp01.corp.jitb.net:3000/d/fleet-overview/fleet-overview
+    http://AW2ANSIBUILDP01.corp.jitb.net:3000/d/fleet-overview/fleet-overview
+
+  By IP:
+    http://10.4.151.93:3000/d/fleet-overview/fleet-overview
+
+  Folder in UI:  Fleet  ->  Fleet Overview
+
+Zabbix (data source for most hosts)
+  https://smczabbixp01p.corp.jitb.net/
+
+
+2) GRAFANA ADMIN LOGIN
+--------------------------------------------------------------------------------
+  Username: admin
+  Password: fleetadmin
+
+  Notes:
+  - Anonymous viewer access is enabled (read-only without login).
+  - Change the admin password after first use if this host is widely reachable.
+  - Password is also set in:
+      /home/ansible/fleet-monitor/grafana/conf/custom.ini
+      [security]
+      admin_user = admin
+      admin_password = fleetadmin
+
+
+3) WHERE GRAFANA IS INSTALLED / LOADED FROM
+--------------------------------------------------------------------------------
+Grafana is a local (user-space) install — NOT a system RPM service.
+
+  Home / binaries:
+    /home/ansible/fleet-monitor/grafana/
+    /home/ansible/fleet-monitor/grafana/bin/grafana
+    /home/ansible/fleet-monitor/grafana/bin/grafana-server
+
+  Config:
+    /home/ansible/fleet-monitor/grafana/conf/custom.ini
+
+  Data / DB / plugins:
+    /home/ansible/fleet-monitor/grafana/data/
+    /home/ansible/fleet-monitor/grafana/plugins/
+    /home/ansible/fleet-monitor/grafana/provisioning/
+      datasources/fleet.yaml
+      dashboards/dashboards.yaml
+      dashboards/json/fleet-overview.json
+
+  Start script:
+    /home/ansible/fleet-monitor/scripts/start_grafana.sh
+
+  Listen port: 3000 (all interfaces)
+
+
+4) STATUS BOARD (SQUARES) — WHERE IT RUNS
+--------------------------------------------------------------------------------
+  App:     /home/ansible/fleet-monitor/web/app.py   (Flask)
+  Static:  /home/ansible/fleet-monitor/web/static/board.css
+           /home/ansible/fleet-monitor/web/static/board.js
+  Template:/home/ansible/fleet-monitor/web/templates/board.html
+  Start:   /home/ansible/fleet-monitor/scripts/start_board.sh
+  Port:    8088
+
+
+5) DATA / METRICS FILES
+--------------------------------------------------------------------------------
+  Latest snapshot (board reads this):
+    /home/ansible/fleet-monitor/data/latest.json
+
+  History DB:
+    /home/ansible/fleet-monitor/data/metrics.db
+
+  Prometheus-style text export:
+    /home/ansible/fleet-monitor/data/fleet.prom
+
+  Inventory source:
+    /etc/ansible/hosts
+
+  Zabbix API credentials:
+    /etc/ansible/playbook/scripts/zabbix_api.env
+    (chmod 600; user millersh)
+
+
+6) LOG FILES
+--------------------------------------------------------------------------------
+  Board (Flask):
+    /home/ansible/fleet-monitor/logs/board.log
+    /home/ansible/fleet-monitor/logs/board.pid
+
+  Grafana:
+    /home/ansible/fleet-monitor/logs/grafana.log
+    /home/ansible/fleet-monitor/logs/grafana.pid
+    (also under grafana/logs/ when started with default paths)
+
+  Collector (manual / detail):
+    /home/ansible/fleet-monitor/logs/collector.log
+
+  Collector (system cron):
+    /home/ansible/fleet-monitor/logs/collector.cron.log
+
+  Keepalive cron (restarts board/grafana if down):
+    /home/ansible/fleet-monitor/logs/keepalive.cron.log
+
+  Disk analysis (when run) uses ansible output; no separate fixed log by default.
+
+
+7) SCHEDULING (SYSTEM CRON — NOT HERMES)
+--------------------------------------------------------------------------------
+  File: /etc/cron.d/fleet-monitor
+  Runs as user: ansible
+  crond service: systemctl status crond
+
+  Jobs:
+    5 * * * *     hourly metrics collect
+                  -> /home/ansible/fleet-monitor/scripts/cron_collect.sh
+    */15 * * * *  keepalive board :8088 + grafana :3000
+                  -> /home/ansible/fleet-monitor/scripts/cron_keepalive.sh
+    @reboot       start board + grafana
+
+  Manual collect now:
+    /home/ansible/fleet-monitor/scripts/cron_collect.sh
+    # or:
+    python3 /home/ansible/fleet-monitor/collector/zabbix_fleet_collect.py
+
+
+8) START / STOP / RESTART
+--------------------------------------------------------------------------------
+  Start board:
+    /home/ansible/fleet-monitor/scripts/start_board.sh
+
+  Start Grafana:
+    /home/ansible/fleet-monitor/scripts/start_grafana.sh
+
+  Stop board:
+    kill $(cat /home/ansible/fleet-monitor/logs/board.pid)
+
+  Stop Grafana:
+    kill $(cat /home/ansible/fleet-monitor/logs/grafana.pid)
+    # or: pkill -f 'grafana server'
+
+  Check listening ports:
+    ss -lntp | grep -E '8088|3000'
+
+
+9) HOW THE BOARD WORKS (SHORT)
+--------------------------------------------------------------------------------
+  1. Hourly cron collects metrics for all hosts in /etc/ansible/hosts.
+  2. Prefer Zabbix API on smczabbixp01p (CPU, mem, disks, uptime).
+  3. If not in Zabbix: ICMP/SSH probe, then Ansible or direct SSH script.
+  4. Results written to data/latest.json.
+  5. Board at :8088 shows one tile per host (short name).
+  6. Colors:
+       green  = ok
+       red    = critical (CPU/mem/disk thresholds)
+       black  = down/off (no ping, SSH closed)
+       purple = ansible_fail (host up, collection failed) — click for details
+  7. Click tile = popup stats + uptime.
+  8. Click disk row = cleanup advisory (tmp/logs first; DB files never listed).
+
+
+10) KEY SCRIPTS
+--------------------------------------------------------------------------------
+  Collector:
+    /home/ansible/fleet-monitor/collector/zabbix_fleet_collect.py
+    /home/ansible/fleet-monitor/collector/ssh_collect.py
+
+  Host metrics (Linux + Solaris, no python required on target):
+    /home/ansible/fleet-monitor/scripts/host_local_metrics.sh
+
+  Disk cleanup advisory:
+    /home/ansible/fleet-monitor/scripts/disk_space_analysis.py
+    /home/ansible/fleet-monitor/scripts/run_disk_analysis_remote.sh
+
+  Cron wrappers:
+    /home/ansible/fleet-monitor/scripts/cron_collect.sh
+    /home/ansible/fleet-monitor/scripts/cron_keepalive.sh
+
+
+11) THRESHOLDS (CRITICAL = RED)
+--------------------------------------------------------------------------------
+  CPU used          >= 90%
+  Memory used       >= 90%
+  Disk used         >= 90%
+
+
+12) RELATED DOCS
+--------------------------------------------------------------------------------
+  /home/ansible/fleet-monitor/README.md
+  /home/ansible/fleet-monitor/HOWTO-fleet-monitor-grafana.txt  (this file)
+
+  Patch scheduler (separate system):
+  /etc/ansible/playbook/scripts/HOWTO-patch-scheduler.md
+
+
+13) QUICK HEALTH CHECK
+--------------------------------------------------------------------------------
+  curl -s -o /dev/null -w 'board:%{http_code}\n'  http://127.0.0.1:8088/
+  curl -s -o /dev/null -w 'grafana:%{http_code}\n' http://127.0.0.1:3000/login
+  curl -s http://127.0.0.1:8088/api/hosts | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('counts'));print(d.get('collected_at'))"
+  tail -20 /home/ansible/fleet-monitor/logs/collector.cron.log
+  tail -20 /home/ansible/fleet-monitor/logs/grafana.log
+
+
+================================================================================
+Document path: /home/ansible/fleet-monitor/HOWTO-fleet-monitor-grafana.txt
+Generated for AW2ANSIBUILDP01 fleet monitor stack.
+================================================================================

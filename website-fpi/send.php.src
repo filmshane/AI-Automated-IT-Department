@@ -1,0 +1,48 @@
+<?php
+// send.php - Form handler for First Property Investment contact form
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Sanitize and retrieve form data
+    $name = htmlspecialchars(trim($_POST['name'] ?? ''));
+    $email = htmlspecialchars(trim($_POST['email'] ?? ''));
+    $phone = htmlspecialchars(trim($_POST['phone'] ?? ''));
+    $address = htmlspecialchars(trim($_POST['address'] ?? ''));
+    $message = htmlspecialchars(trim($_POST['message'] ?? ''));
+
+    // Validate required fields (basic check)
+    if (empty($name) || empty($email) || empty($phone) || empty($address)) {
+        die('Error: All fields are required. Please go back and fill out the form.');
+    }
+
+    // Email configuration
+    $to = 'shane.a.miller@live.com';
+    $subject = 'First Property Investment: buy lead';
+    $headers = [
+        'From: ' . $email,
+        'Reply-To: ' . $email,
+        'X-Mailer: PHP/' . phpversion()
+    ];
+
+    // Email body
+    $body = "New buy lead submission from First Property Investment website:\n\n";
+    $body .= "Full Name: $name\n";
+    $body .= "Email: $email\n";
+    $body .= "Phone Number: $phone\n";
+    $body .= "Property Address: $address\n";
+    $body .= "About Property: $message\n\n";
+    $body .= "Submitted on: " . date('Y-m-d H:i:s') . "\n";
+
+    // Send email using PHP's mail() function (relies on sendmail or local mail config)
+    if (mail($to, $subject, $body, implode("\r\n", $headers))) {
+        // Redirect to thank you page or show success message
+        header('Location: thank-you.html'); // Assuming a thank-you page exists
+        exit;
+    } else {
+        die('Error: Unable to send email. Please try again later.');
+    }
+} else {
+    // If not POST, redirect to the main page
+    header('Location: index.html'); // Assuming the main page is index.html
+    exit;
+}
+?>

@@ -1,0 +1,246 @@
+# Ansible Linux patch calendar — source of truth for the scheduler
+# Times are America/Los_Angeles (PST/PDT).
+# week: first  = first week of month (days 1–7 style weekday match)
+#        last  = last week of month (final occurrence of that weekday)
+# weekday: mon,tue,wed,thu,fri,sat,sun
+# patch_time: 24h HH:MM start of window (when patch_and_verify.yml runs)
+# enabled: false = schedule/notify only skipped until confirmed
+# inventory_group must match /etc/ansible/hosts (or hosts.ini for Aspera)
+
+timezone: America/Los_Angeles
+
+# =============================================================================
+# OPERATING MODE
+# =============================================================================
+# testing: true  => ONLY allow_job_ids below may notify or patch.
+#                   All other calendar jobs are materialized as enabled=no.
+# testing: false => Full production scheduler (set only when explicitly approved).
+# WE ARE IN TESTING MODE UNTIL THE OWNER SAYS OTHERWISE.
+mode:
+  testing: true
+  allow_job_ids:
+    - ebstest_process_test
+  # If true, even allowed jobs only send email — never run patch_and_verify.yml
+  notify_only: false
+
+# Zabbix maintenance (pre-patch)
+zabbix:
+  enabled: true
+  api_host: smczabbixp01p.corp.jitb.net
+  user: millersh
+  # password in scripts/zabbix_api.env (not in git)
+  minutes_before: 10
+  duration_minutes: 360  # safety ceiling; removed 10m after patch ends
+  collect_data: true
+
+
+inventory: /etc/ansible/hosts
+# Extra inventory for groups not in main hosts file (Aspera)
+extra_inventories:
+  - /etc/ansible/hosts.ini
+
+mail:
+  smtp_host: mail.jackinthebox.com
+  smtp_port: 25
+  from: ansible@corp.jitb.net
+  # Always CC operations on every notice (optional)
+  always_cc: []
+
+# Shared contact aliases (expand in recipients lists)
+contacts:
+  l2: l2.run.operations@jackinthebox.com
+  cmteam: cmteam@jackinthebox.com
+  dba_oracle: dba_jib_oracle@jackinthebox.com
+  sanketh: sanketh.chikodi@jackinthebox.com
+  vijay: vijay.thiyagarajan@jackinthebox.com
+  sysops_aws: sysops-aws@jackinthebox.com
+  sysops_unix: sysops-unix@jackinthebox.com
+  # Mailer used for scheduler testing (Manoj direct bounces)
+  sysops_unix_test: SysOps-UNIX@jackinthebox.com
+  shane: shane.miller@jackinthebox.com
+  manoj: manoj.sanap@jackinthebox.com
+  # Names without mailbox yet — documented as owners only
+  # robert_lyons / denese_campose / paul_phillips — add email when known
+
+# ---------------------------------------------------------------------------
+# PROD — 1st week of the month
+# ---------------------------------------------------------------------------
+applications:
+  - id: zabbix_prod
+    name: Zabbix Prod
+    inventory_group: ZABBIXPROD
+    tier: prod
+    week: first
+    weekday: tue
+    patch_time: "18:00"
+    window: "06:00 PM - 02:00 AM"
+    recipients: [l2]
+    owners_text: "l2.run.operations@jackinthebox.com"
+    enabled: true
+
+  - id: bigfix_prod
+    name: Bigfix Prod
+    inventory_group: BIGFIXPROD
+    tier: prod
+    week: first
+    weekday: mon
+    patch_time: "06:00"
+    window: "06:00 AM - 08:00 AM"
+    recipients: [cmteam, l2]
+    owners_text: "cmteam@jackinthebox.com; l2.run.operations@jackinthebox.com"
+    enabled: true
+
+  - id: aspera_prod
+    name: Aspera Prod
+    inventory_group: ASPERSPROD
+    tier: prod
+    week: first
+    weekday: wed
+    patch_time: "22:00"
+    window: "10:00 PM - 11:59 PM"
+    recipients: [sanketh, l2]
+    owners_text: "sanketh.chikodi@jackinthebox.com; l2.run.operations@jackinthebox.com"
+    enabled: true
+    notes: "Group lives in /etc/ansible/hosts.ini"
+
+  - id: ebs_prod
+    name: EBS Prod
+    inventory_group: EBSPROD
+    tier: prod
+    week: first
+    weekday: thu
+    patch_time: "22:00"
+    window: "10:00 PM - 11:59 PM"
+    recipients: [dba_oracle]
+    owners_text: "dba_jib_oracle@jackinthebox.com, Robert Lyons, Denese Campose"
+    enabled: true
+
+  - id: clarity_prod
+    name: Clarity Prod
+    inventory_group: CLARITYPROD
+    tier: prod
+    week: first
+    weekday: fri
+    patch_time: "19:00"          # provisional until confirmed
+    window: "NEED TO CONFIRM"
+    recipients: [l2]             # interim; add Paul Phillips email when known
+    owners_text: "Paul Phillips"
+    enabled: false
+    notes: "Time not confirmed — scheduler will skip until enabled: true"
+
+  - id: wctr_prod
+    name: Wbctr Prod
+    inventory_group: WCTRPROD
+    tier: prod
+    week: first
+    weekday: thu
+    patch_time: "19:00"          # provisional until confirmed
+    window: "NEED TO CONFIRM"
+    recipients: [dba_oracle]
+    owners_text: "dba_jib_oracle@jackinthebox.com, Robert Lyons, Denese Campose"
+    enabled: false
+    notes: "Time not confirmed — scheduler will skip until enabled: true"
+
+  - id: infra
+    name: Infra
+    inventory_group: OTHERS
+    tier: prod
+    week: first
+    weekday: tue
+    patch_time: "06:00"
+    window: "06:00 AM - 08:00 AM"
+    recipients: [vijay, sysops_aws, sysops_unix]
+    owners_text: "vijay.thiyagarajan@jackinthebox.com; sysops-aws@jackinthebox.com; sysops-unix@jackinthebox.com"
+    enabled: true
+    notes: "Mapped to inventory group OTHERS — adjust if Infra uses another group"
+
+  # -------------------------------------------------------------------------
+  # TEST — last week of the month
+  # -------------------------------------------------------------------------
+  - id: bigfix_test
+    name: BigFix Test
+    inventory_group: BIGFIXTEST
+    tier: test
+    week: last
+    weekday: mon
+    patch_time: "06:00"
+    window: "06:00 AM - 08:00 AM"
+    recipients: [cmteam, l2]
+    owners_text: "cmteam@jackinthebox.com; l2.run.operations@jackinthebox.com"
+    enabled: true
+
+  - id: zabbix_test
+    name: Zabbix Test
+    inventory_group: ZABBIXTEST
+    tier: test
+    week: last
+    weekday: tue
+    patch_time: "18:00"
+    window: "06:00 PM - 02:00 AM"
+    recipients: [l2]
+    owners_text: "l2.run.operations@jackinthebox.com"
+    enabled: true
+
+  - id: ebs_test
+    name: EBS Test
+    inventory_group: EBSTEST
+    tier: test
+    week: last
+    weekday: thu
+    patch_time: "06:00"
+    window: "06:00 AM - 08:00 AM"
+    recipients: [dba_oracle, shane, manoj]
+    owners_text: "dba_jib_oracle@jackinthebox.com, Robert Lyons, Denese Campose"
+    enabled: true
+
+  - id: aspera_test
+    name: Aspera Test
+    inventory_group: ASPERADEV
+    tier: test
+    week: last
+    weekday: wed
+    patch_time: "06:00"
+    window: "06:00 AM - 08:00 AM"
+    recipients: [sanketh, l2]
+    owners_text: "sanketh.chikodi@jackinthebox.com; l2.run.operations@jackinthebox.com"
+    enabled: true
+    notes: "Group lives in /etc/ansible/hosts.ini"
+
+  - id: wctr_test
+    name: Wbctr Test
+    inventory_group: WCTRDEV
+    tier: test
+    week: last
+    weekday: thu
+    patch_time: "19:00"          # provisional
+    window: "NEED TO CONFIRM"
+    recipients: [dba_oracle]
+    owners_text: "dba_jib_oracle@jackinthebox.com, Robert Lyons, Denese Campose"
+    enabled: false
+
+  - id: clarity_test
+    name: Clarity Test
+    inventory_group: CLARITYTEST
+    tier: test
+    week: last
+    weekday: wed
+    patch_time: "19:00"          # provisional
+    window: "NEED TO CONFIRM"
+    recipients: [l2]
+    owners_text: "Paul Phillips"
+    enabled: false
+
+# One-off / test overrides (explicit dates). Used for EBSTEST dry-run of the process.
+# These are merged on top of the recurring calendar when materializing.
+overrides:
+  - id: ebstest_process_test
+    name: EBS Test (process test window)
+    inventory_group: EBSTEST
+    patch_date: "2026-07-23"
+    patch_time: "19:00"
+    window: "07:00 PM (test window)"
+    recipients:
+      - SysOps-UNIX@jackinthebox.com
+    owners_text: "SysOps-UNIX@jackinthebox.com (testing distribution; not Shane/Manoj direct)"
+    enabled: true
+    notes: "Temporary process test — emails go to SysOps-UNIX ML only (Manoj direct bounces)"

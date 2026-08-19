@@ -1,0 +1,14 @@
+---
+- name: Add a line to the end of a file
+  hosts: all # Replace with your target host(s) or group
+  #become: yes
+  remote_user: ansible
+  tasks:
+    - name: Ensure a specific line exists at the end of the file
+      ansible.builtin.lineinfile:
+        path: /home/ansible/test
+        #path: /home/ansible/.ssh/authorized_keys # Replace with the actual file path
+        line: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDcflBZnuur0zFyA8FzzmWD4blmx3QcisZspr5Hw75bSaiv3hoMjQMpPDx3ywmKwTlNJsn9decW9aovHlnqLyABO+py0tEtUybbABsMb+1xA6ABH+QcPzcJBZjgVEtMOd8A5/eOmOWM9wSjmltbdJfVHLafjlstnKbGZAt0jvhPSOFP5lpjANO9COBGn8EE7z/Dq6n5MMM7rGBp2hGT3aG9dQh9ETkyQWqApnNjNq9tfxzmvGYfbvlKYBObaS6E32A0WVJ9TeBgU3i1grR7SJ1altF9fTgp5SaHzrbqU0T5AjRU40iueIkrwmvGgi+HMs5er9tKaY1SiHRg4c45ZAQgPKGC7NIBAd8MAePiGX/zOyJvCxXtIS8lHa+63cHElbYGgXmk/QaBvomTjkcimfLRnuHC8Z3ykADDqviCOIP/bvnFJNdzl9tZCIxm4JizUkqDgb1S+5Mo6Eot1d0/hyU6d+7r3pxLK1M1gvPuFQygOMzlz0tzB7Exfo8rVGWG3W0= ansible@AW2ANSIBUILDP01.corp.jitb.net"
+        insertafter: EOF
+        create: true # Set to true if you want to create the file if it doesn't
+

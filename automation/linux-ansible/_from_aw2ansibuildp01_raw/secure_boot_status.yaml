@@ -1,0 +1,23 @@
+---
+- name: Check Secure Boot Status
+  hosts: all
+  become: yes
+  tasks:
+    - name: Check Secure Boot using dmesg
+      shell: dmesg | grep -i "secure boot"
+      register: dmesg_secure_boot
+      failed_when: false
+      changed_when: false
+
+    - name: Verify Secure Boot state using mokutil
+      command: mokutil --sb-state
+      register: mokutil_status
+      failed_when: false
+      changed_when: false
+
+    - name: Display Secure Boot status
+      debug:
+        msg:
+          - "dmesg output: {{ dmesg_secure_boot.stdout_lines | default(['Not found'], true) }}"
+          - "mokutil output: {{ mokutil_status.stdout }}"
+

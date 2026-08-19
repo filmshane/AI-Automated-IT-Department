@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FPI CRM | First Property Investment</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: Inter, system-ui, Arial, sans-serif; }
+    .stage-chip { @apply inline-block text-xs font-semibold px-2 py-1 rounded-full; }
+    tr.selected { background: #fef3c7; }
+    .mono { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-900 min-h-screen">
+  <header class="bg-gray-900 text-white shadow">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-xl font-bold">FPI CRM</h1>
+        <p class="text-sm text-gray-300">First Property Investment · lead pipeline</p>
+      </div>
+      <div class="flex items-center gap-3 text-sm">
+        <a href="/" class="underline text-yellow-400">Main site</a>
+        <button id="btn-refresh" class="bg-yellow-500 text-gray-900 px-3 py-1.5 rounded font-semibold hover:bg-yellow-400">Refresh</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-5 gap-6">
+    <!-- List -->
+    <section class="lg:col-span-2 bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+      <div class="px-4 py-3 border-b bg-gray-50 flex justify-between items-center">
+        <h2 class="font-semibold">Leads</h2>
+        <span id="lead-count" class="text-xs text-gray-500"></span>
+      </div>
+      <div id="pipeline" class="px-4 py-2 text-xs text-gray-600 border-b flex flex-wrap gap-2"></div>
+      <div class="overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-100 sticky top-0">
+            <tr class="text-left">
+              <th class="px-3 py-2">Name</th>
+              <th class="px-3 py-2">Stage</th>
+              <th class="px-3 py-2">Q</th>
+            </tr>
+          </thead>
+          <tbody id="lead-rows"></tbody>
+        </table>
+      </div>
+      <p id="list-error" class="hidden p-3 text-red-700 text-sm"></p>
+    </section>
+
+    <!-- Detail -->
+    <section class="lg:col-span-3 bg-white rounded-xl shadow border border-gray-200">
+      <div class="px-4 py-3 border-b bg-gray-50">
+        <h2 class="font-semibold">Customer & property detail</h2>
+        <p id="detail-sub" class="text-xs text-gray-500">Select a lead</p>
+      </div>
+      <div id="detail" class="p-4 space-y-5 text-sm">
+        <p class="text-gray-500">No lead selected.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="text-center text-xs text-gray-500 py-6">
+    FPI CRM · data from SQLite · Alex collects house fields before Scout
+  </footer>
+
+  <script>
+  const API = 'api.php';
+  const $ = (id) => document.getElementById(id);
+  let leads = [];
+  let selectedId = null;
+
+  const money = (v) => {
+    if (v === null || v === undefined || v === '') return '—';
+    const n = Number(v);
+    if (Number.isNaN(n)) return String(v);
+    return '$' + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  };
+  const val = (v) => (v === null || v === undefined || v === '' ? '—' : String(v));
+  const yn = (v) => {
+    if (v === null || v === undefined || v === '') return '—';
+    const s = String(v).toUpperCase();
+    if (s === 'Y' || s === 'YES' || s === '1') return 'Y';
+    if (s === 'N' || s === 'NO' || s === '0') return 'N';
+    return String(v);
+  };
+
+  function stageClass(st) {
+    if (!st) return 'bg-gray-200';
+    if (st.includes('WAITING_MAX')) return 'bg-yellow-200 text-yellow-900';
+    if (st.includes('SCOUT')) return 'bg-blue-100 text-blue-900';
+    if (st.includes('ALEX') || st.includes('CURR')) return 'bg-indigo-100 text-indigo-900';
+    if (st.includes('LISA') || st.includes('APPROVED')) return 'bg-green-100 text-green-900';
+    if (st.includes('CONTRACT') || st.includes('SIGNED')) return 'bg-emerald-200 text-emerald-900';
+    if (st.includes('FLIPPER')) return 'bg-purple-100 text-purple-900';
+    if (st.includes('CLOSED')) return 'bg-gray-800 text-white';
+    return 'bg-gray-200';
+  }
+
+  function fieldGrid(pairs) {
+    return `<div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">` +
+      pairs.map(([k,v]) => `
+        <div class="border-b border-gray-100 py-1">
+          <div class="text-xs text-gray-500">${k}</div>
+          <div class="font-medium break-words">${v}</div>
+        </div>`).join('') + `</div>`;
+  }
+
+  function section(title, html) {
+    return `<div><h3 class="text-base font-bold text-gray-900 mb-2 border-l-4 border-yellow-500 pl-2">${title}</h3>${html}</div>`;
+  }
+
+  function renderList() {
+    const tb = $('lead-rows');
+    tb.innerHTML = '';
+    leads.forEach(L => {
+      const tr = document.createElement('tr');
+      tr.className = 'border-t hover:bg-yellow-50 cursor-pointer' + (L.id === selectedId ? ' selected' : '');
+      tr.onclick = () => selectLead(L.id);
+      const name = [L.first_name, L.last_name].filter(Boolean).join(' ') || L.full_name || '—';
+      tr.innerHTML = `
+        <td class="px-3 py-2">
+          <div class="font-semibold">${name}</div>
+          <div class="text-xs text-gray-500 truncate max-w-[14rem]">${val(L.property_address)}</div>
+        </td>
+        <td class="px-3 py-2"><span class="stage-chip ${stageClass(L.status)}">${val(L.status_label || L.status)}</span></td>
+        <td class="px-3 py-2 font-bold">${yn(L.qualified)}</td>`;
+      tb.appendChild(tr);
+    });
+    $('lead-count').textContent = leads.length + ' lead(s)';
+  }
+
+  function renderPipeline(counts) {
+    const el = $('pipeline');
+    if (!counts || !Object.keys(counts).length) { el.innerHTML = ''; return; }
+    el.innerHTML = Object.entries(counts).map(([st,c]) =>
+      `<span class="stage-chip ${stageClass(st)}">${st.replaceAll('_',' ')}: ${c}</span>`
+    ).join('');
+  }
+
+  async function selectLead(id) {
+    selectedId = id;
+    renderList();
+    $('detail-sub').textContent = 'Loading…';
+    const r = await fetch(API + '?action=get&id=' + encodeURIComponent(id));
+    const data = await r.json();
+    if (!data.ok) {
+      $('detail').innerHTML = `<p class="text-red-600">${data.error || 'Error'}</p>`;
+      return;
+    }
+    const L = data.lead;
+    const name = [L.first_name, L.last_name].filter(Boolean).join(' ') || L.full_name || '—';
+    $('detail-sub').textContent = name + ' · ' + (L.status_label || L.status);
+
+    let lot = '—';
+    if (L.lot_size_acres) lot = Number(L.lot_size_acres) + ' acres';
+    if (L.lot_size_sqft) lot += (lot === '—' ? '' : ' / ') + Number(L.lot_size_sqft).toLocaleString() + ' sf';
+
+    const contact = fieldGrid([
+      ['First name', val(L.first_name)],
+      ['Last name', val(L.last_name)],
+      ['Phone', val(L.phone_display)],
+      ['Email', val(L.email_display)],
+      ['Preferred contact', val(L.preferred_contact)],
+      ['Best time / window', val(L.best_time_to_call || L.preferred_call_window)],
+    ]);
+
+    const property = fieldGrid([
+      ['Street address', val(L.property_address)],
+      ['City / State / ZIP', [L.property_city, L.property_state, L.property_zip].filter(Boolean).join(', ') || '—'],
+      ['Beds', val(L.beds)],
+      ['Baths', val(L.baths)],
+      ['Square feet', L.sqft != null ? Number(L.sqft).toLocaleString() + ' sf' : '—'],
+      ['Year built', val(L.year_built)],
+      ['Garage', val(L.garage_label)],
+      ['Lot size', lot],
+      ['Stories', val(L.stories)],
+      ['Basement', val(L.basement_type)],
+      ['Property type', val(L.property_type)],
+      ['Occupancy', val(L.occupancy)],
+      ['HOA', yn(L.hoa)],
+      ['Pool', yn(L.pool)],
+      ['Last remodel year', val(L.last_remodel_year)],
+      ['Last remodel notes', val(L.last_remodel_notes)],
+      ['Roof age/condition', val(L.roof_age_or_condition)],
+      ['HVAC age/condition', val(L.hvac_age_or_condition)],
+      ['Major repairs needed', val(L.major_repairs_needed)],
+      ['Listed with agent', yn(L.listed_with_agent)],
+      ['Other offers', val(L.other_offers)],
+      ['House info summary', val(L.house_info_summary)],
+      ['Condition notes', val(L.condition_notes)],
+    ]);
+
+    const stage = fieldGrid([
+      ['Stage', val(L.status_label)],
+      ['Status code', val(L.status)],
+      ['Qualified (Y/N)', yn(L.qualified)],
+      ['Qualified at', val(L.qualified_at)],
+      ['Owner agent', val(L.owner_agent)],
+      ['AI call consent', L.ai_call_consent == 1 ? 'Yes' : 'No'],
+      ['Website opt-in', L.website_opt_in == 1 ? 'Yes' : 'No'],
+    ]);
+
+    const alex = fieldGrid([
+      ['Motivation', val(L.motivation)],
+      ['Motivation detail', val(L.motivation_detail)],
+      ['Timeline', val(L.timeline)],
+      ['Walk-away ask', money(L.walk_away_ask)],
+      ['Mortgage approx', money(L.mortgage_balance_approx)],
+      ['Owner / authority', val(L.owner_authority_notes)],
+      ['Tenant lease end', val(L.tenant_lease_end)],
+      ['Alex notes', val(L.alex_notes)],
+      ['Appointment', val(L.appointment_at)],
+    ]);
+
+    const scout = fieldGrid([
+      ['ARV working', money(L.scout_arv_working)],
+      ['ARV low / high', money(L.scout_arv_low) + ' / ' + money(L.scout_arv_high)],
+      ['Rehab L / M / H', money(L.scout_rehab_low) + ' / ' + money(L.scout_rehab_medium) + ' / ' + money(L.scout_rehab_high)],
+      ['Seller max M (after fee)', money(L.scout_seller_max_medium)],
+      ['Max price (Shane)', money(L.max_price)],
+      ['Underwriting case', val(L.underwriting_case)],
+      ['Assignment fee target', money(L.scout_assignment_fee)],
+    ]);
+
+    let hist = '<p class="text-gray-500">No history</p>';
+    if (data.status_history && data.status_history.length) {
+      hist = '<ul class="space-y-1 text-xs mono">' + data.status_history.map(h =>
+        `<li><span class="text-gray-500">${val(h.at).slice(0,19)}</span> · ${val(h.from_status)} → <strong>${val(h.to_status)}</strong> [${val(h.actor)}]</li>`
+      ).join('') + '</ul>';
+    }
+
+    $('detail').innerHTML =
+      section('Customer', contact) +
+      section('Property (Alex / pre-Scout)', property) +
+      section('Pipeline stage', stage) +
+      section('Alex qualify notes', alex) +
+      section('Scout / Shane numbers', scout) +
+      section('Status history', hist) +
+      `<div class="text-xs text-gray-400 pt-2">Lead ID: ${val(L.id)} · Updated ${val(L.updated_at)}</div>`;
+  }
+
+  async function load() {
+    $('list-error').classList.add('hidden');
+    try {
+      const r = await fetch(API + '?action=list&_=' + Date.now());
+      const data = await r.json();
+      if (!data.ok) throw new Error(data.error || 'API error');
+      leads = data.leads || [];
+      renderPipeline(data.counts || {});
+      renderList();
+      if (selectedId) {
+        if (!leads.find(l => l.id === selectedId) && leads[0]) selectedId = leads[0].id;
+        if (selectedId) await selectLead(selectedId);
+      } else if (leads[0]) {
+        await selectLead(leads[0].id);
+      }
+    } catch (e) {
+      $('list-error').textContent = String(e.message || e);
+      $('list-error').classList.remove('hidden');
+    }
+  }
+
+  $('btn-refresh').onclick = load;
+  load();
+  setInterval(load, 60000);
+  </script>
+</body>
+</html>

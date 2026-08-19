@@ -1,0 +1,36 @@
+---
+- name: Delete user from RedHat/Debian servers
+  hosts: all
+  become: yes
+  vars_prompt:
+    - name: "username"
+      prompt: "Enter the username to delete"
+      private: no
+
+  tasks:
+    - name: Check if user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ username }}"
+      register: user_check
+      ignore_errors: yes
+
+    - name: Delete user if exists
+      ansible.builtin.user:
+        name: "{{ username }}"
+        state: absent
+        remove: yes   # removes home directory and mail spool
+      when: user_check is defined
+      register: delete_result
+
+    - name: Show result of user deletion or absence
+      ansible.builtin.debug:
+        msg: >-
+          {% if delete_result is defined and delete_result.changed %}
+            User '{{ username }}' was deleted successfully.
+          {% elif user_check is not defined or (user_check.passwd is not defined) %}
+            User '{{ username }}' does not exist on this server.
+          {% else %}
+            No action taken for user '{{ username }}'.
+          {% endif %}
+

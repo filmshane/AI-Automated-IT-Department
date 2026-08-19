@@ -1,0 +1,148 @@
+---
+- name: Join Linux Server to Windows AD Domain
+  hosts: all
+  become: yes
+  vars:
+    ad_domain: "corp.jitb.net"
+      #ad_user: "sanapm"
+      #ad_password: "YourStrongPassword"  # You can use Ansible Vault for this
+      #computer_ou: "OU=LinuxServers,DC=example,DC=com"
+
+  vars_prompt:
+    - name: "ad_admin_user"
+      prompt: "Enter the domain admin username"
+      private: no
+    - name: "ad_admin_password"
+      prompt: "Enter the domain admin password"
+      private: yes  
+
+  tasks:
+    - name: Ensure required packages are installed (RHEL)
+      ansible.builtin.package:
+        name:
+          - realmd
+          - sssd
+          - sssd-ad
+          - oddjob
+          - oddjob-mkhomedir
+          - adcli
+          - samba-common
+          - samba-common-tools
+          - krb5-libs
+          - krb5-workstation
+          - openldap-clients
+          - policycoreutils-python
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Ensure required packages are installed (Debian/Ubuntu)
+      package:
+        name:
+          - realmd
+          - sssd
+          - sssd-tools
+          - adcli
+          - libnss-sss 
+          - libpam-sss 
+          - samba-common
+          - samba
+          - samba-common-bin
+          - krb5-user
+          - packagekit
+          - oddjob
+          - oddjob-mkhomedir
+          - ldap-utils
+          - policycoreutils-python-utils
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Ensure the realm is discoverable
+      ansible.builtin.command: realm discover {{ ad_domain }}
+      register: realm_discover
+      changed_when: false
+      failed_when: realm_discover.rc != 0
+
+    - name: Join the machine to the AD domain
+      ansible.builtin.command: >
+        realm join {{ ad_domain }}
+        --user={{ ad_admin_user }}
+        --verbose
+      args:
+        stdin: "{{ ad_admin_password }}"
+      register: join_result
+      changed_when: "'already joined' not in join_result.stdout"
+      failed_when:
+        - join_result.rc != 0
+        - "'already joined' not in join_result.stdout"
+
+    - name: Allow domain users to log in
+      ansible.builtin.command: realm permit --all
+      register: permit_result
+      changed_when: permit_result.rc == 0
+
+    - name: Ensure home directories are created automatically
+      ansible.builtin.lineinfile:
+        path: /etc/sssd/sssd.conf
+        regexp: '^#?override_homedir ='
+        line: 'override_homedir = /home/%d/%u'
+        insertafter: '[domain/{{ ad_domain }}]'
+        backup: yes
+
+    - name: Configure SSSD with a Fallback Home Directory
+      ansible.builtin.lineinfile:
+        path: /etc/sssd/sssd.conf
+        regexp: '^#?fallback_homedir ='
+        line: 'fallback_homedir = /home/%u'
+        insertafter: '[domain/{{ ad_domain }}]'
+        backup: yes
+
+
+    - name: Ensure user login without @domain suffix
+      ansible.builtin.lineinfile:
+        path: /etc/sssd/sssd.conf
+        regexp: '^#?full_name_format ='
+        line: 'full_name_format = %1$s'
+        insertafter: '[domain/{{ ad_domain }}]'
+        backup: yes
+
+    - name: Add line in [SSSD]
+      lineinfile:
+        path: "/etc/sssd/sssd.conf"
+        line: "default_domain_suffix = corp.jitb.net"
+        insertafter: "services = nss, pam"    
+      notify: Restart services sssd and sshd
+
+    - name: Change GSSAPIAuthentication value
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^GSSAPIAuthentication\s+yes'
+        line: 'GSSAPIAuthentication no'
+        backup: yes
+
+    - name: Ensure pam_mkhomedir is configured for Ubuntu.
+      lineinfile:
+        path: "/etc/pam.d/common-session"
+        #path: "{{ ansible_os_family | ternary('/etc/pam.d/common-session', '/etc/pam.d/system-auth') }}"
+        regexp: '^session\s+required\s+pam_mkhomedir\.so'
+        line: 'session required pam_mkhomedir.so skel=/etc/skel/ umask=0077'
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Ensure pam_mkhomedir is configured for RHEL.
+      lineinfile:
+        path: "/etc/pam.d/system-auth"
+        #path: "{{ ansible_os_family | ternary('/etc/pam.d/common-session', '/etc/pam.d/system-auth') }}"
+        regexp: '^session\s+required\s+pam_mkhomedir\.so'
+        line: 'session required pam_mkhomedir.so skel=/etc/skel/ umask=0077'
+        state: present
+      when: ansible_os_family == "RedHat"
+
+  handlers:
+    - name: Restart services sssd and sshd
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: restarted
+      with_items:
+        - sssd
+        - sshd
+

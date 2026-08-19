@@ -1,0 +1,6 @@
+customer_code: demo
+engine: mssql
+conn:
+  dsn: Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=AppDB;Encrypt=yes;TrustServerCertificate=yes;
+output_dir: ./out
+allowlist_dir: ./allowlist

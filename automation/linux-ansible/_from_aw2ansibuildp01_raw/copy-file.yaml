@@ -1,0 +1,27 @@
+- name: Copy folder or file to server
+  hosts: all
+  become: yes
+  vars_prompt:
+    - name: "source_path"
+      prompt: "Enter the filename to copy"
+      private: no
+
+    - name: "destination_path"
+      prompt: "Enter the the destination file path to copy"
+      private: no
+
+  tasks:
+
+    - name: Copy a folder to the server
+      ansible.builtin.copy:
+        src: "{{ source_path }}"
+        dest: "{{ destination_path }}"
+        owner: ansible
+        group: users
+        mode: '0755'
+          #recurse: yes
+
+    - name: List the copied file
+      ansible.builtin.command: ls -ltrh '{{ destination_path }}'
+      register: file_listing
+

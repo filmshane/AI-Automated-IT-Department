@@ -1,0 +1,331 @@
+# SANITIZED copy from AW2ANSIBUILDP01:/etc/ansible/playbook (patch_and_verify.yml)
+# For AutomationAI customer product use — review before production.
+# Original employer-specific hosts/domains/secrets stripped or vaulted.
+
+---
+# Patch by inventory group (from /etc/ansible/hosts).
+#
+# REQUIRED:
+#   -e target_group=<group>
+#
+# Examples:
+#   ansible-playbook /etc/ansible/playbook/patch_and_verify.yml -e target_group=EBSTEST
+#   ansible-playbook /etc/ansible/playbook/patch_and_verify.yml -e target_group=PRODTIMEKEEPING
+#   ansible-playbook /etc/ansible/playbook/patch_and_verify.yml -e target_group=test --check
+#
+# Optional extra limit within the group:
+#   ansible-playbook ... -e target_group=EBSTEST --limit ebta1colo.example.customer.local
+#
+# Common groups: test, EBSPROD, EBSTEST, OIDTESTPROD, OTHERS,
+#   PRODTIMEKEEPING, tk_app, tk_web, tk_db, WCTRPROD, WCTRDEV,
+#   ZABBIXPROD, ZABBIXTEST, BIGFIXPROD, BIGFIXTEST, CLARITYPROD, CLARITYTEST
+
+- name: Validate target group and ensure archive directory on control node
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: true
+  vars:
+    archive_dir: /opt/patches
+    archive_owner: ansible
+    archive_group: ansible
+  tasks:
+    - name: Require target_group extra var
+      fail:
+        msg: |
+          You must specify which inventory group to patch.
+
+          Usage:
+            ansible-playbook /etc/ansible/playbook/patch_and_verify.yml -e target_group=<GROUP>
+
+          Examples:
+            -e target_group=EBSTEST
+            -e target_group=PRODTIMEKEEPING
+            -e target_group=test
+
+          See groups in /etc/ansible/hosts
+      when: target_group is not defined or target_group | length == 0
+
+    - name: Validate target_group exists in inventory
+      assert:
+        that:
+          - target_group in groups
+        fail_msg: |
+          Inventory group '{{ target_group }}' was not found.
+
+          Known groups:
+          {{ groups.keys() | list | reject('equalto', 'all') | reject('equalto', 'ungrouped') | list | sort | join(', ') }}
+
+          Check /etc/ansible/hosts and re-run with -e target_group=<GROUP>
+        success_msg: "Group '{{ target_group }}' found in inventory"
+
+    - name: Validate target_group has hosts
+      assert:
+        that:
+          - groups[target_group] | length > 0
+        fail_msg: |
+          Inventory group '{{ target_group }}' exists but has 0 hosts.
+          Nothing to patch. Check /etc/ansible/hosts.
+        success_msg: "Group '{{ target_group }}' has {{ groups[target_group] | length }} host(s)"
+
+    - name: Show hosts that will be patched
+      debug:
+        msg: |
+          Patch target group: {{ target_group }}
+          Host count: {{ groups[target_group] | length }}
+          Hosts:
+          {% for h in groups[target_group] | sort %}
+            - {{ h }}
+          {% endfor %}
+
+    - name: Create archive directory if missing
+      file:
+        path: "{{ archive_dir }}"
+        state: directory
+        owner: "{{ archive_owner }}"
+        group: "{{ archive_group }}"
+        mode: "0755"
+
+    - name: Verify archive directory exists and is usable by ansible
+      become: false
+      stat:
+        path: "{{ archive_dir }}"
+      register: archive_stat
+
+    - name: Fail if archive directory is missing
+      fail:
+        msg: "Archive directory {{ archive_dir }} does not exist on the control node."
+      when: not archive_stat.stat.exists or not archive_stat.stat.isdir
+
+    - name: Fail if archive directory is not writable by ansible
+      become: false
+      shell: test -w "{{ archive_dir }}"
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: archive_writable
+      failed_when: archive_writable.rc != 0
+
+    - name: Show archive directory status
+      debug:
+        msg: >-
+          Control node archive ready: {{ archive_dir }}
+          (owner={{ archive_stat.stat.pw_name | default('n/a') }},
+          mode={{ archive_stat.stat.mode }},
+          writable by ansible=yes)
+
+- name: Cross-platform patch verification playbook (yum + apt)
+  hosts: "{{ target_group | default('target_group_REQUIRED') }}"
+  become: true
+  gather_facts: true
+
+  vars:
+    patch_dir: /tmp
+    archive_dir: /opt/patches
+
+  tasks:
+    - name: Get current date
+      command: date +%Y-%m-%d
+      register: current_date
+      changed_when: false
+
+    - name: Set common facts
+      set_fact:
+        today: "{{ current_date.stdout }}"
+        hostname: "{{ inventory_hostname }}"
+
+    - name: Ensure remote patch working directory exists
+      file:
+        path: "{{ patch_dir }}"
+        state: directory
+        mode: "1777"
+
+    # ============================================
+    # REDHAT / CENTOS / ROCKY / ALMA (YUM/DNF)
+    # ============================================
+    - name: RedHat family tasks
+      when: ansible_os_family == "RedHat"
+      block:
+        - name: Set RedHat variables
+          set_fact:
+            log_file: /var/log/yum.log
+            exclude_pattern: "kernel*"
+            pm: yum
+
+        - name: Run yum check-update (excluding kernel)
+          shell: |
+            yum check-update --exclude={{ exclude_pattern }} > {{ patch_dir }}/{{ hostname }}-{{ today }}-check-update.txt 2>&1 || true
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+        - name: Extract expected package list (RedHat)
+          shell: |
+            grep -E '^[a-zA-Z0-9]' {{ patch_dir }}/{{ hostname }}-{{ today }}-check-update.txt | \
+            awk '{print $1}' | sort > {{ patch_dir }}/{{ hostname }}-{{ today }}-expected.txt || true
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+        - name: Run yum update excluding kernel
+          yum:
+            name: '*'
+            state: latest
+            exclude: "{{ exclude_pattern }}"
+            update_cache: true
+          register: update_result
+
+        - name: Capture today's entries from yum.log
+          shell: |
+            grep "{{ today | replace('-', '/') }}" {{ log_file }} | \
+            grep -E '(Updated|Installed|Erased)' > {{ patch_dir }}/{{ hostname }}-{{ today }}-yum.log.txt || true
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+        - name: Extract actually updated packages from yum.log
+          shell: |
+            grep 'Updated:' {{ patch_dir }}/{{ hostname }}-{{ today }}-yum.log.txt | \
+            awk '{print $5}' | sed 's/-[0-9].*//' | sort > {{ patch_dir }}/{{ hostname }}-{{ today }}-actual.txt || true
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+    # ============================================
+    # DEBIAN / UBUNTU (APT)
+    # ============================================
+    - name: Debian family tasks
+      when: ansible_os_family == "Debian"
+      block:
+        - name: Set Debian variables
+          set_fact:
+            log_file: /var/log/apt/history.log
+            exclude_pattern: "linux-image*|linux-headers*|linux-modules*"
+            pm: apt
+
+        - name: Run apt list --upgradable (excluding kernel)
+          shell: |
+            apt list --upgradable 2>/dev/null | grep -v "Listing..." | \
+            grep -vE '{{ exclude_pattern }}' > {{ patch_dir }}/{{ hostname }}-{{ today }}-check-update.txt || true
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+        - name: Extract expected package list (Debian)
+          shell: |
+            grep -oE '^[^/]+' {{ patch_dir }}/{{ hostname }}-{{ today }}-check-update.txt | sort \
+            > {{ patch_dir }}/{{ hostname }}-{{ today }}-expected.txt || true
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+        - name: Run apt upgrade excluding kernel packages
+          shell: |
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" 2>&1 || true
+          args:
+            executable: /bin/bash
+          register: update_result
+
+        - name: Capture today's entries from apt history.log
+          shell: |
+            grep "{{ today }}" {{ log_file }} -A 20 | \
+            grep -E 'Upgrade:|Install:' > {{ patch_dir }}/{{ hostname }}-{{ today }}-yum.log.txt || true
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+        - name: Extract actually updated packages from apt log
+          shell: |
+            grep -oE 'Upgrade:.*' {{ patch_dir }}/{{ hostname }}-{{ today }}-yum.log.txt | \
+            sed 's/Upgrade: //' | tr ',' '\n' | awk '{print $1}' | sort \
+            > {{ patch_dir }}/{{ hostname }}-{{ today }}-actual.txt || true
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+    # ============================================
+    # COMMON TASKS (Comparison + Archiving)
+    # ============================================
+    - name: Compare expected vs actual updates
+      shell: |
+        echo "=== PATCH VERIFICATION REPORT ===" > {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+        echo "Hostname: {{ hostname }}" >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+        echo "Inventory group: {{ target_group }}" >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+        echo "Date: {{ today }}" >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+        echo "Package Manager: {{ pm | default('unknown') }}" >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+        echo "" >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+
+        echo "=== Expected updates from check-update ===" >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+        cat {{ patch_dir }}/{{ hostname }}-{{ today }}-expected.txt >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt || true
+        echo "" >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+
+        echo "=== Actual updates applied ===" >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+        cat {{ patch_dir }}/{{ hostname }}-{{ today }}-actual.txt >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt || true
+        echo "" >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+
+        echo "=== Differences (expected but not applied) ===" >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+        comm -23 {{ patch_dir }}/{{ hostname }}-{{ today }}-expected.txt {{ patch_dir }}/{{ hostname }}-{{ today }}-actual.txt >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt || true
+        echo "" >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+
+        echo "=== Extra updates applied ===" >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+        comm -13 {{ patch_dir }}/{{ hostname }}-{{ today }}-expected.txt {{ patch_dir }}/{{ hostname }}-{{ today }}-actual.txt >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt || true
+        echo "" >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+
+        if diff {{ patch_dir }}/{{ hostname }}-{{ today }}-expected.txt {{ patch_dir }}/{{ hostname }}-{{ today }}-actual.txt > /dev/null 2>&1; then
+          echo "RESULT: SUCCESS - All expected updates were applied." >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+        else
+          echo "RESULT: MISMATCH - Review differences above." >> {{ patch_dir }}/{{ hostname }}-{{ today }}-comparison.txt
+        fi
+      args:
+        executable: /bin/bash
+      register: comparison_result
+      changed_when: false
+
+    - name: Create zip archive of all patch reports
+      shell: |
+        cd {{ patch_dir }} && \
+        zip {{ hostname }}-{{ today }}-patches.zip \
+          {{ hostname }}-{{ today }}-check-update.txt \
+          {{ hostname }}-{{ today }}-expected.txt \
+          {{ hostname }}-{{ today }}-actual.txt \
+          {{ hostname }}-{{ today }}-yum.log.txt \
+          {{ hostname }}-{{ today }}-comparison.txt 2>/dev/null || true
+      args:
+        executable: /bin/bash
+      register: zip_result
+
+    - name: Ensure archive directory still exists on control node before fetch
+      delegate_to: localhost
+      become: false
+      file:
+        path: "{{ archive_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Fetch the zip file back to Ansible control node
+      fetch:
+        src: "{{ patch_dir }}/{{ hostname }}-{{ today }}-patches.zip"
+        dest: "{{ archive_dir }}/{{ hostname }}-{{ today }}-patches.zip"
+        flat: true
+
+    - name: Verify fetched zip exists on control node
+      delegate_to: localhost
+      become: false
+      stat:
+        path: "{{ archive_dir }}/{{ hostname }}-{{ today }}-patches.zip"
+      register: fetched_zip
+
+    - name: Fail if zip was not saved on control node
+      fail:
+        msg: "Expected {{ archive_dir }}/{{ hostname }}-{{ today }}-patches.zip on control node but it is missing."
+      when: not fetched_zip.stat.exists
+
+    - name: Display summary
+      debug:
+        msg: |
+          Patch verification complete for {{ hostname }} ({{ ansible_os_family }})
+          Inventory group: {{ target_group }}
+          Zip file created: {{ patch_dir }}/{{ hostname }}-{{ today }}-patches.zip
+          Copied to control node: {{ archive_dir }}/{{ hostname }}-{{ today }}-patches.zip
+          Comparison result: {{ comparison_result.stdout_lines[-1] | default('See comparison file') }}

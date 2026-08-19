@@ -1,0 +1,15 @@
+---
+- name: Copy file to all hosts/clients
+  hosts: all
+
+  tasks:
+
+    - name: Copying File
+      become: true
+      copy:
+        src: /root/get-pip.py
+        dest: /root
+        owner: root
+        group: users
+        mode: 0744
+

@@ -1,0 +1,95 @@
+---
+- name: Set Up Global System-Wide Proxy
+  hosts: all
+  become: true
+  vars:
+    # Modify these variables with your actual proxy details
+    proxy_server: "http://csproxy.corp.jitb.net:9090/"
+    no_proxy_list: "localhost,127.0.0.1,localaddress"
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # 1. /etc/environment Configuration
+    # -------------------------------------------------------------------------
+    - name: Check if proxy string already exists in /etc/environment
+      ansible.builtin.lineinfile:
+        path: /etc/environment
+        regexp: '(?i)proxy='
+        state: absent
+      check_mode: true
+      register: env_proxy_check
+      failed_when: false
+      changed_when: false
+
+    - name: Configure global proxy in /etc/environment
+      ansible.builtin.blockinfile:
+        path: /etc/environment
+        state: present
+        create: true
+        marker: "# {mark} ANSIBLE MANAGED PROXY SETTINGS"
+        block: |
+          http_proxy="{{ proxy_server }}"
+          https_proxy="{{ proxy_server }}"
+          ftp_proxy="{{ proxy_server }}"
+          no_proxy="{{ no_proxy_list }}"
+#          HTTP_PROXY="{{ proxy_server }}"
+#          HTTPS_PROXY="{{ proxy_server }}"
+#          FTP_PROXY="{{ proxy_server }}"
+#          NO_PROXY="{{ no_proxy_list }}"
+      when: not env_proxy_check.found
+
+    # -------------------------------------------------------------------------
+    # 2. Shell Profiles (/etc/profile.d/global_proxy.sh)
+    # -------------------------------------------------------------------------
+    - name: Check if global_proxy.sh profile already exists
+      ansible.builtin.stat:
+        path: /etc/profile.d/global_proxy.sh
+      register: profile_script_check
+      
+    - name: Configure profile.d script for interactive shells
+      ansible.builtin.copy:
+        dest: /etc/profile.d/global_proxy.sh
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          # Global proxy settings for interactive shells
+          export http_proxy="{{ proxy_server }}"
+          export https_proxy="{{ proxy_server }}"
+          export ftp_proxy="{{ proxy_server }}"
+          export no_proxy="{{ no_proxy_list }}"
+      when: not profile_script_check.stat.exists
+
+    - name: Configure proxy for APT package manager (Debian/Ubuntu)
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/95proxies
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          Acquire::http::proxy "{{ proxy_server }}/";
+          Acquire::https::proxy "{{ proxy_server }}/";
+      when: ansible_os_family == "Debian"
+
+    - name: Configure proxy for DNF package manager (RHEL/Fedora/Rocky)
+      ansible.builtin.ini_file:
+        path: /etc/dnf/dnf.conf
+        section: main
+        option: proxy
+        value: "{{ proxy_server }}"
+        mode: '0644'
+      when: 
+        - ansible_os_family == "RedHat"
+        - ansible_distribution_major_version | int >= 8
+
+    - name: Configure proxy for YUM package manager (Older RHEL/CentOS)
+      ansible.builtin.ini_file:
+        path: /etc/yum.conf
+        section: main
+        option: proxy
+        value: "{{ proxy_server }}"
+        mode: '0644'
+      when: 
+        - ansible_os_family == "RedHat"
+        - ansible_distribution_major_version | int < 8
+

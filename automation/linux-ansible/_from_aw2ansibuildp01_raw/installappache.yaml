@@ -1,0 +1,14 @@
+---
+- name: Installing and starting appache w/systemctl
+  hosts: trservers
+
+  tasks:
+  - name: Install apache
+    yum:
+      name: httpd
+      state: present 
+  - name: start httpd
+    service:
+      name: httpd
+      state: started
+

@@ -1,0 +1,301 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="First Property Investment buys houses in any condition for cash, covers all closing costs and fees, and closes fast in 30-45 days. No repairs, no hassle, just cash!">
+    <title>First Property Investment | We Buy Houses Fast for Cash</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+        }
+        .hero-bg {
+            background-image: url('/images/old-broken-house.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+        .overlay {
+            background: rgba(0, 0, 0, 0.6);
+        }
+        .faq-item {
+            cursor: pointer;
+        }
+        .faq-answer {
+            display: none;
+        }
+        .faq-answer.active {
+            display: block;
+        }
+        .image-gallery {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .image-gallery img {
+            max-width: 300px;
+            height: 200px;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="bg-gray-900 text-white sticky top-0 z-50 shadow-lg">
+        <div class="container mx-auto px-0 py-0 flex justify-between items-center">
+            <div class="text-2xl font-bold">
+                <a href="/">
+                    <img src="/images/FPI-Logo.jpg" width="200" height="60" alt="First Property Investment Logo" class="h-30">
+                </a>
+            </div>
+            <nav class="space-x-6">
+                <a href="#home" class="hover:text-yellow-400 transition">Home</a>
+                <a href="#how-it-works" class="hover:text-yellow-400 transition">How It Works</a>
+                <a href="#why-us" class="hover:text-yellow-400 transition">Why Choose Us</a>
+                <a href="#faq" class="hover:text-yellow-400 transition">FAQ</a>
+                <a href="#contact" class="hover:text-yellow-400 transition">Get Cash Offer</a>
+            </nav>
+            <div class="hidden md:block">
+                <a href="tel:+1-800-555-1234" class="bg-yellow-500 text-gray-900 px-4 py-2 rounded-full hover:bg-yellow-600 transition">
+                    Call Now: 1-800-555-1234
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero-bg text-white py-20">
+        <div class="overlay py-20">
+            <div class="container mx-auto px-4 text-center">
+                <h1 class="text-4xl md:text-6xl font-bold mb-4">We Buy Houses Fast for Cash!</h1>
+                <p class="text-xl md:text-2xl mb-6">Sell your house in ANY condition to First Property Investment. We pay ALL closing costs, cover fees, and close in 30-45 days. No repairs needed – take what you want, we’ll clean up the rest!</p>
+                <a href="#contact" class="bg-yellow-500 text-gray-900 px-6 py-3 rounded-full text-lg font-semibold hover:bg-yellow-600 transition">Get Your Free Cash Offer Now</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section id="how-it-works" class="py-16 bg-gray-100">
+        <div class="container mx-auto px-4">
+            <h2 class="text-3xl md:text-4xl font-bold text-center mb-12">How It Works</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="bg-white p-6 rounded-lg shadow-lg text-center">
+                    <i class="fas fa-phone-alt text-4xl text-yellow-500 mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2">1. Contact Us</h3>
+                    <p>Fill out our form or call us to tell us about your property. We’ll schedule a quick visit to assess your house – no prep needed!</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-lg text-center">
+                    <i class="fas fa-dollar-sign text-4xl text-yellow-500 mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2">2. Get a Cash Offer</h3>
+                    <p>Within 24 hours, we’ll present a fair, no-obligation cash offer based on your home’s condition and market value.</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-lg text-center">
+                    <i class="fas fa-handshake text-4xl text-yellow-500 mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2">3. Close Fast</h3>
+                    <p>Choose your closing date (30-45 days or longer). We pay all closing costs and fees, and you get cash in hand!</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Why Choose Us Section -->
+    <section id="why-us" class="py-16 bg-white">
+        <div class="container mx-auto px-4">
+            <h2 class="text-3xl md:text-4xl font-bold text-center mb-12">Why Choose First Property Investment?</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <div class="text-center">
+                    <i class="fas fa-home text-4xl text-yellow-500 mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2">Any Condition</h3>
+                    <p>We buy houses as-is, no matter the state – from fixer-uppers to homes with code violations or liens.</p>
+                </div>
+                <div class="text-center">
+                    <i class="fas fa-wallet text-4xl text-yellow-500 mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2">No Fees or Costs</h3>
+                    <p>We cover ALL closing costs and fees. The offer you accept is the cash you receive.</p>
+                </div>
+                <div class="text-center">
+                    <i class="fas fa-clock text-4xl text-yellow-500 mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2">Fast Closing</h3>
+                    <p>Close in 30-45 days or on your timeline. We handle everything for a hassle-free sale.</p>
+                </div>
+                <div class="text-center">
+                    <i class="fas fa-broom text-4xl text-yellow-500 mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2">No Cleanup Needed</h3>
+                    <p>Take what you want and leave the rest. We’ll clean up and handle all repairs after closing.</p>
+                </div>
+            </div>
+            <div class="mt-12 text-center">
+                <div class="image-gallery">
+                    <img src="/images/image2.jpg" alt="Happy client in front of a sold house" class="rounded-lg shadow-lg">
+                    <img src="/images/WE-buy-houses.jpg" alt="Happy client in front of a sold house" class="rounded-lg shadow-lg">
+                    <img src="/images/image3.jpg" alt="Happy client in front of a sold house" class="rounded-lg shadow-lg">
+                </div>
+                <p class="mt-4 text-gray-600">Another satisfied client after a fast and hassle-free sale!</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section id="faq" class="py-16 bg-gray-100">
+        <div class="container mx-auto px-4">
+            <h2 class="text-3xl md:text-4xl font-bold text-center mb-12">Frequently Asked Questions</h2>
+            <div class="space-y-4">
+                <div class="faq-item bg-white p-4 rounded-lg shadow-lg">
+                    <h3 class="text-lg font-semibold flex justify-between items-center">What types of houses do you buy?<i class="fas fa-chevron-down"></i></h3>
+                    <div class="faq-answer mt-2">
+                        <p>We buy houses in any condition, including distressed properties, foreclosures, inherited homes, rentals, or homes needing major repairs.</p>
+                    </div>
+                </div>
+                <div class="faq-item bg-white p-4 rounded-lg shadow-lg">
+                    <h3 class="text-lg font-semibold flex justify-between items-center">How fast can you close?<i class="fas fa-chevron-down"></i></h3>
+                    <div class="faq-answer mt-2">
+                        <p>We can close in 30-45 days, or even faster if needed, depending on your schedule and the title process.</p>
+                    </div>
+                </div>
+                <div class="faq-item bg-white p-4 rounded-lg shadow-lg">
+                    <h3 class="text-lg font-semibold flex justify-between items-center">Do I need to make repairs?<i class="fas fa-chevron-down"></i></h3>
+                    <div class="faq-answer mt-2">
+                        <p>No! We buy houses as-is, so you don’t need to spend time or money on repairs or cleaning.</p>
+                    </div>
+                </div>
+                <div class="faq-item bg-white p-4 rounded-lg shadow-lg">
+                    <h3 class="text-lg font-semibold flex justify-between items-center">Are there any fees?<i class="fas fa-chevron-down"></i></h3>
+                    <div class="faq-answer mt-2">
+                        <p>Absolutely none. We cover all closing costs, title fees, and escrow charges. You get the full cash offer amount.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+   <!-- Contact Section -->
+    <section id="contact" class="py-16 bg-yellow-500 text-gray-900">
+        <div class="container mx-auto px-4">
+            <h2 class="text-3xl md:text-4xl font-bold text-center mb-12">Get Your Free Cash Offer Today!</h2>
+            <div class="max-w-lg mx-auto bg-white p-6 rounded-lg shadow-lg">
+                <form action="/send.php" method="POST">
+                    <div class="mb-4">
+                        <label for="name" class="block text-sm font-medium">Full Name</label>
+                        <input type="text" id="name" name="name" class="w-full p-2 border rounded-md" required>
+                    </div>
+                    <div class="mb-4">
+                        <label for="email" class="block text-sm font-medium">Email</label>
+                        <input type="email" id="email" name="email" class="w-full p-2 border rounded-md" required>
+                    </div>
+                    <div class="mb-4">
+                        <label for="phone" class="block text-sm font-medium">Phone Number</label>
+                        <input type="tel" id="phone" name="phone" class="w-full p-2 border rounded-md" required>
+                    </div>
+                    <div class="mb-4">
+                        <label for="address" class="block text-sm font-medium">Property Address</label>
+                        <input type="text" id="address" name="address" class="w-full p-2 border rounded-md" required>
+                    </div>
+                    <div class="mb-4">
+                        <label for="message" class="block text-sm font-medium">Tell Us About Your Property</label>
+                        <textarea id="message" name="message" class="w-full p-2 border rounded-md" rows="4"></textarea>
+                    </div>
+                    <button type="submit" class="w-full bg-gray-900 text-white px-6 py-3 rounded-full hover:bg-gray-800 transition">Submit for Cash Offer</button>
+                </form>
+            </div>
+            <p class="text-center mt-6">Or call us at <a href="tel:+1-800-555-1234" class="underline font-semibold">1-800-555-1234</a></p>
+        </div>
+    </section>
+
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-white py-8">
+        <div class="container mx-auto px-4 text-center">
+            <p>&copy; 2025 First Property Investment. All rights reserved.</p>
+            <p class="mt-2">firstpropertyinvestment.us | <a href="tel:+1-800-555-1234" class="underline">1-800-555-1234</a> | <a href="/cdn-cgi/l/email-protection#e08d848c85a0868982939490a0828f829085948381968f878c96a08781" class="underline"><span class="__cf_email__" data-cfemail="f09d949c95b0969998828581b08392849691809792859699948e9d8b8c959d968cd08b8d">[email&#160;protected]</span></a></p>
+        </div>
+    </footer>
+
+    <!-- JavaScript for File Processing -->
+    <script>
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+            return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+            if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+                try {
+                    var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                    var firstSheetName = workbook.SheetNames[0];
+                    var worksheet = workbook.Sheets[firstSheetName];
+                    var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                    var filteredData = jsonData.filter(row => row.some(filledCell));
+                    var headerRowIndex = filteredData.findIndex((row, index) =>
+                        row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                    );
+                    if (headerRowIndex === -1 || headerRowIndex > 25) {
+                        headerRowIndex = 0;
+                    }
+                    var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
+                    csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                    return csv;
+                } catch (e) {
+                    console.error(e);
+                    return "";
+                }
+            }
+            return gk_fileData[filename] || "";
+        }
+    </script>
+
+    <!-- JavaScript for FAQ Toggle -->
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
+    <script>
+        document.querySelectorAll('.faq-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const answer = item.querySelector('.faq-answer');
+                answer.classList.toggle('active');
+            });
+        });
+    </script>
+</body>
+</html>

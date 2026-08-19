@@ -1,0 +1,5 @@
+-- Rename after DBA review
+SELECT c.CustomerId, c.Name, c.Email, c.Phone, c.LastPurchaseDate
+FROM dbo.Customers c
+WHERE c.LastPurchaseDate < DATEADD(day, -90, GETDATE())
+  AND c.Email IS NOT NULL AND c.MarketingOptIn = 1;

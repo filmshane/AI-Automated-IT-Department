@@ -1,0 +1,61 @@
+# SANITIZED copy from AW2ANSIBUILDP01:/etc/ansible/playbook (zabbix_maintenance.yml)
+# For AutomationAI customer product use — review before production.
+# Original employer-specific hosts/domains/secrets stripped or vaulted.
+
+---
+- name: Zabbix maintenance window
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    zabbix_api_host: smczabbixp01p.example.customer.local
+    zabbix_user: operator
+    maint_minutes: 240
+    maint_state: present
+    maint_desc: "Scheduled Linux OS patching via Ansible"
+    zabbix_visible_name: true
+    zabbix_collect_data: true
+
+  tasks:
+    - name: Require maintenance name
+      assert:
+        that:
+          - maint_name is defined
+          - maint_name | length > 0
+
+    - name: Require hosts when present
+      assert:
+        that:
+          - maint_hosts is defined
+          - maint_hosts | length > 0
+      when: maint_state == 'present'
+
+    - name: Require password (extra-var or env)
+      assert:
+        that:
+          - (zabbix_password | default(lookup('env','ZABBIX_PASSWORD')) | default('') | length) > 0
+        fail_msg: "Set ZABBIX_PASSWORD env or -e zabbix_password=..."
+
+    - name: Create or update Zabbix maintenance window
+      community.zabbix.zabbix_maintenance:
+        name: "{{ maint_name }}"
+        desc: "{{ maint_desc }}"
+        host_names: "{{ maint_hosts }}"
+        minutes: "{{ maint_minutes | int }}"
+        state: "{{ maint_state }}"
+        collect_data: "{{ zabbix_collect_data | bool }}"
+        visible_name: "{{ zabbix_visible_name | bool }}"
+        server_url: "https://{{ zabbix_api_host }}"
+        login_user: "{{ zabbix_user }}"
+        login_password: "{{ vault_password | mandatory }}"
+        validate_certs: false
+      register: maint_result
+      no_log: true
+
+    - name: Show result summary
+      debug:
+        msg:
+          - "Zabbix maintenance '{{ maint_name }}' state={{ maint_state }} changed={{ maint_result.changed | default(false) }}"
+          - "Hosts ({{ maint_hosts | length }}): {{ maint_hosts | join(', ') }}"
+          - "Duration minutes: {{ maint_minutes }}"

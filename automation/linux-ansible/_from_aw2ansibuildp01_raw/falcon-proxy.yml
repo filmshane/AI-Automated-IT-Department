@@ -1,0 +1,29 @@
+---
+- name: Configure CrowdStrike Falcon Sensor Proxy
+  hosts: all
+  become: true
+  vars:
+    proxy_host: "csproxy.corp.jitb.net"
+    proxy_port: "9090"
+#    proxy_user: "your_username"
+#    proxy_pass: "your_password"
+
+  tasks:
+    - name: Set Falcon proxy host, port, and credentials
+      ansible.builtin.command:
+        cmd: "/opt/CrowdStrike/falconctl -s --aph={{ proxy_host }} --app={{ proxy_port }}"
+      register: proxy_config_result
+      changed_when: "'status=0x0' in proxy_config_result.stdout or proxy_config_result.rc == 0"
+
+    - name: Ensure Falcon proxy is explicitly enabled
+      ansible.builtin.command:
+        cmd: "/opt/CrowdStrike/falconctl -s --apd=FALSE"
+      register: proxy_enable_result
+      changed_when: "'status=0x0' in proxy_enable_result.stdout or proxy_enable_result.rc == 0"
+
+    - name: Restart Falcon Sensor to apply changes
+      ansible.builtin.systemd:
+        name: falcon-sensor
+        state: restarted
+        enabled: true
+

@@ -1,0 +1,7 @@
+# Apache / nginx note
+# DirectoryIndex index.html
+# Require php-sqlite3
+# DB path: data/fpi_crm.db (synced from project CRM)
+
+Options -Indexes
+DirectoryIndex index.html

@@ -1,0 +1,28 @@
+---
+- name: Check RAM, CPU, and Logical Cores on RHEL
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Display RAM (Total Memory)
+      debug:
+        msg: "Total RAM: {{ ansible_memtotal_mb }} MB"
+
+    - name: Display CPU Model
+      debug:
+        msg: "CPU Model: {{ ansible_processor[1] | default('Unknown') }}"
+
+    - name: Display Total Logical Cores (vCPUs)
+      debug:
+        msg: "Total Logical Cores: {{ ansible_processor_vcpus }}"
+
+    - name: Display Physical Core Details
+      debug:
+        msg: "Physical Cores: {{ ansible_processor_cores }}, Sockets: {{ ansible_processor_count }}"
+
+    - name: Detailed System Report
+      debug:
+        msg: 
+          - "System: {{ ansible_hostname }}"
+          - "Memory: {{ ansible_memtotal_mb }} MB"
+          - "CPU: {{ ansible_processor_vcpus }} Logical Cores ({{ ansible_processor[1] | default('Unknown') }})"
+

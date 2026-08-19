@@ -1,0 +1,35 @@
+---
+- name: Copy and install packages on RedHat and Debian
+  hosts: all
+  become: yes
+  vars:
+    deb_pkg: "mypackage.deb"
+    rpm_pkg: "mypackage.rpm"
+
+  tasks:
+
+    - name: Copy Debian package
+      copy:
+        src: "{{ deb_pkg }}"
+        dest: "/tmp/{{ deb_pkg }}"
+      when: ansible_os_family == "Debian"
+
+    - name: Install Debian package
+      apt:
+        deb: "/tmp/{{ deb_pkg }}"
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Copy RedHat package
+      copy:
+        src: "{{ rpm_pkg }}"
+        dest: "/tmp/{{ rpm_pkg }}"
+      when: ansible_os_family == "RedHat"
+
+    - name: Install RedHat package
+      yum:
+        name: "/tmp/{{ rpm_pkg }}"
+        state: present
+      when: ansible_os_family == "RedHat"
+
+

@@ -1,0 +1,33 @@
+---
+- name: Configure CrowdStrike Falcon Agent Settings
+  hosts: all
+  become: true
+  tasks:
+    - name: Configure CrowdStrike proxy host and port
+      ansible.builtin.command:
+        cmd: /opt/CrowdStrike/falconctl -s -f --cid=ECC1BD9321CB49F9A2807ABE0840A346-4A --aph=csproxy.corp.jitb.net --app=9090
+      register: proxy_config
+      changed_when: "proxy_config.rc == 0"
+
+    - name: Disable proxy auto-discovery
+      ansible.builtin.command:
+        cmd: /opt/CrowdStrike/falconctl -s --apd=FALSE
+      register: apd_config
+      changed_when: "apd_config.rc == 0"
+
+    - name: Verify updated Falcon settings
+      ansible.builtin.command:
+        cmd: /opt/CrowdStrike/falconctl -g --aph --app --apd
+      register: falcon_status
+      changed_when: false
+
+    - name: Restart falcon service
+      ansible.builtin.service:
+       name: falcon-sensor
+       state: restarted
+
+    - name: Display current Falcon configurations
+      ansible.builtin.debug:
+        var: falcon_status.stdout_lines
+
+

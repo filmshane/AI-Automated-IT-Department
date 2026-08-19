@@ -1,0 +1,8 @@
+---
+patch_dir: /tmp/aai-patch
+archive_dir: "{{ playbook_dir }}/../files/reports"
+patch_apply: true
+patch_include_kernel: false
+redhat_kernel_exclude: "kernel*"
+debian_kernel_exclude: "linux-image*|linux-headers*|linux-modules*"
+customer_code: lab

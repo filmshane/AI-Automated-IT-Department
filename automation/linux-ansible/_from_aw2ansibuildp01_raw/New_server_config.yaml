@@ -1,0 +1,345 @@
+---
+- name: Modernized Server Build Playbook
+  hosts: all
+  become: true
+  vars:
+    hostnm: "{{ hostname }}"
+    sysip: "{{ system_ip }}"
+    netwk: "{{ network }}"
+    log_file: "/var/log/New-server-build-{{ ansible_date_time.date }}-{{ ansible_date_time.time | replace(':', '') }}.txt"
+
+  pre_tasks:
+    - name: Validate input arguments
+      fail:
+        msg: "Missing or invalid argument: {{ item }}"
+      when: vars[item] is not defined or vars[item] == '' or (item == 'hostnm' and hostnm is not regex('[a-zA-Z]'))
+      loop:
+        - hostnm
+        - sysip
+        - netwk
+
+    - name: Create log file
+      file:
+        path: "{{ log_file }}"
+        state: touch
+        mode: '0644'
+
+    - name: Log playbook start
+      lineinfile:
+        path: "{{ log_file }}"
+        line: "{{ item }}"
+        create: yes
+      with_items:
+        - "Playbook started at {{ ansible_date_time.iso8601 }}"
+        - "Hostname: {{ hostnm }}"
+        - "System IP: {{ sysip }}"
+        - "Network: {{ netwk }}"
+
+  roles:
+    - common
+    - os_specific
+
+  post_tasks:
+    - name: Reboot the system
+      reboot:
+        msg: "Reboot initiated by Ansible"
+        reboot_timeout: 300
+---
+
+- name: Common Tasks
+  hosts: all
+  become: true
+  tasks:
+    - name: Install net-tools
+      package:
+        name: net-tools
+        state: present
+
+    - name: Create user accounts
+      user:
+        name: "{{ item.name }}"
+        groups: "{{ item.groups }}"
+        comment: "{{ item.comment }}"
+        password: "{{ 'abc123def456test' | password_hash('sha512') }}"
+        update_password: on_create
+        password_expire_max: 90
+        password_expire_min: 1
+        password_expire_warning: 14
+      loop:
+        - { name: 'millershuxadmin', groups: 'users,wheel', comment: 'Shane Miller - JITB' }
+        - { name: 'sanapmuxadmin', groups: 'users,wheel', comment: 'Manoj Sanap - Mphasis' }
+        - { name: 'mmanikandanuxadmin', groups: 'users,wheel', comment: 'Manikandan M - Mphasis' }
+
+    - name: Set hostname
+      hostname:
+        name: "{{ hostnm }}.corp.jitb.net"
+
+    - name: Update /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ sysip }} {{ hostnm }}.corp.jitb.net {{ hostnm }}"
+        state: present
+
+    - name: Install and configure chrony
+      block:
+        - name: Install chrony
+          package:
+            name: chrony
+            state: present
+        - name: Configure chrony
+          template:
+            src: chrony.conf.j2
+            dest: /etc/chrony.conf
+            backup: yes
+        - name: Enable and start chronyd
+          service:
+            name: chronyd
+            state: started
+            enabled: yes
+        - name: Set timezone
+          timezone:
+            name: America/Los_Angeles
+
+    - name: Install expect
+      package:
+        name: expect
+        state: present
+
+- name: OS-Specific Tasks
+  hosts: all
+  become: true
+  tasks:
+    - name: Include OS-specific tasks
+      include_tasks: "{{ ansible_os_family | lower }}.yml"
+
+# Oracle Linux (RedHat family) tasks
+- name: Oracle Linux Specific Tasks
+  hosts: all
+  become: true
+  tasks:
+    - name: Modify /etc/login.defs
+      lineinfile:
+        path: /etc/login.defs
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^PASS_MAX_DAYS', line: 'PASS_MAX_DAYS   90' }
+        - { regexp: '^PASS_MIN_DAYS', line: 'PASS_MIN_DAYS    1' }
+        - { regexp: '^PASS_MIN_LEN', line: 'PASS_MIN_LEN     15' }
+        - { regexp: '^PASS_WARN_AGE', line: 'PASS_WARN_AGE   14' }
+        - { regexp: '^UID_MIN', line: 'UID_MIN                   500' }
+        - { regexp: '^UID_MAX', line: 'UID_MAX                   60000' }
+        - { regexp: '^GID_MIN', line: 'GID_MIN                   500' }
+        - { regexp: '^GID_MAX', line: 'GID_MAX                   60000' }
+      when: ansible_os_family == 'RedHat'
+
+    - name: Configure /etc/security/pwquality.conf
+      lineinfile:
+        path: /etc/security/pwquality.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^# minlen =', line: 'minlen = 12' }
+        - { regexp: '^# dcredit =', line: 'dcredit = 1' }
+        - { regexp: '^# ucredit =', line: 'ucredit = 1' }
+        - { regexp: '^# lcredit =', line: 'lcredit = 1' }
+        - { regexp: '^# ocredit =', line: 'ocredit = 1' }
+      when: ansible_os_family == 'RedHat'
+
+    - name: Configure /etc/resolv.conf
+      template:
+        src: resolv.conf.j2
+        dest: /etc/resolv.conf
+        backup: yes
+      when: ansible_os_family == 'RedHat'
+
+    - name: Patch system
+      yum:
+        name: '*'
+        state: latest
+        exclude: kernel
+      when: ansible_os_family == 'RedHat'
+
+    - name: Disable firewalld
+      service:
+        name: firewalld
+        state: stopped
+        enabled: no
+      when: ansible_os_family == 'RedHat'
+
+    - name: Disable SELinux
+      selinux:
+        state: disabled
+      when: ansible_os_family == 'RedHat'
+
+    - name: Install Cylance
+      yum:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - "/etc/ansible/FILES/oraclelinux/{{ ansible_distribution_version }}/CylancePROTECTOpenDriver-*.rpm"
+        - "/etc/ansible/FILES/oraclelinux/{{ ansible_distribution_version }}/CylancePROTECTDriver-*.rpm"
+        - "/etc/ansible/FILES/oraclelinux/{{ ansible_distribution_version }}/CylancePROTECT.*.rpm"
+      when: ansible_os_family == 'RedHat'
+
+    - name: Install BigFix
+      block:
+        - name: Copy BigFix files
+          copy:
+            src: "/etc/ansible/FILES/oraclelinux/{{ ansible_distribution_version }}/BESAgent-*.rpm"
+            dest: "/etc/opt/BESClient/BESAgent.rpm"
+            mode: '0775'
+        - name: Install BigFix RPM
+          yum:
+            name: "/etc/opt/BESClient/BESAgent.rpm"
+            state: present
+        - name: Start BigFix service
+          service:
+            name: besclient
+            state: started
+            enabled: yes
+      when: ansible_os_family == 'RedHat'
+
+    - name: Install Zabbix
+      block:
+        - name: Copy Zabbix repo
+          copy:
+            src: "/etc/ansible/FILES/oraclelinux/{{ ansible_distribution_version }}/*.repo"
+            dest: /etc/yum.repos.d/
+        - name: Copy Zabbix key
+          copy:
+            src: "/etc/ansible/FILES/oraclelinux/{{ ansible_distribution_version }}/RPM-GPG-KEY-ZABBIX-*"
+            dest: /etc/pki/rpm-gpg/
+        - name: Install Zabbix agent
+          yum:
+            name: zabbix-agent
+            state: present
+        - name: Configure Zabbix agent
+          lineinfile:
+            path: /etc/zabbix/zabbix_agentd.conf
+            regexp: "{{ item.regexp }}"
+            line: "{{ item.line }}"
+          loop:
+            - { regexp: '^Server=', line: 'Server=10.103.3.183,10.104.48.51' }
+            - { regexp: '^ServerActive=', line: 'ServerActive=10.103.3.183,10.104.48.51' }
+      when: ansible_os_family == 'RedHat'
+
+# Ubuntu (Debian family) tasks
+- name: Ubuntu Specific Tasks
+  hosts: all
+  become: true
+  tasks:
+    - name: Modify /etc/login.defs
+      lineinfile:
+        path: /etc/login.defs
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^PASS_MAX_DAYS', line: 'PASS_MAX_DAYS   90' }
+        - { regexp: '^PASS_MIN_DAYS', line: 'PASS_MIN_DAYS    1' }
+        - { regexp: '^PASS_MIN_LEN', line: 'PASS_MIN_LEN     15' }
+        - { regexp: '^PASS_WARN_AGE', line: 'PASS_WARN_AGE   14' }
+        - { regexp: '^UID_MIN', line: 'UID_MIN                   500' }
+        - { regexp: '^UID_MAX', line: 'UID_MAX                   60000' }
+        - { regexp: '^GID_MIN', line: 'GID_MIN                   500' }
+        - { regexp: '^GID_MAX', line: 'GID_MAX                   60000' }
+      when: ansible_os_family == 'Debian'
+
+    - name: Configure password quality with PAM
+      pamd:
+        name: common-password
+        type: password
+        control: requisite
+        module_path: pam_pwquality.so
+        module_arguments: 'retry=3 minlen=12 dcredit=1 ucredit=1 lcredit=1 ocredit=1'
+      when: ansible_os_family == 'Debian'
+
+    - name: Configure /etc/resolv.conf
+      template:
+        src: resolv.conf.j2
+        dest: /etc/resolv.conf
+        backup: yes
+      when: ansible_os_family == 'Debian'
+
+    - name: Patch system
+      apt:
+        upgrade: dist
+        update_cache: yes
+      when: ansible_os_family == 'Debian'
+
+    - name: Disable ufw
+      service:
+        name: ufw
+        state: stopped
+        enabled: no
+      when: ansible_os_family == 'Debian'
+
+    - name: Install Cylance
+      apt:
+        deb: "{{ item }}"
+      loop:
+        - "/etc/ansible/FILES/ubuntu/{{ ansible_distribution_version }}/cylanceprotectopendriver_*.deb"
+        - "/etc/ansible/FILES/ubuntu/{{ ansible_distribution_version }}/cylanceprotectdriver_*.deb"
+        - "/etc/ansible/FILES/ubuntu/{{ ansible_distribution_version }}/cylanceprotect_*.deb"
+      when: ansible_os_family == 'Debian'
+
+    - name: Install BigFix
+      block:
+        - name: Install BigFix DEB
+          apt:
+            deb: "/etc/ansible/FILES/ubuntu/{{ ansible_distribution_version }}/besagent_*.deb"
+        - name: Start BigFix service
+          service:
+            name: besclient
+            state: started
+            enabled: yes
+      when: ansible_os_family == 'Debian'
+
+    - name: Install Zabbix
+      block:
+        - name: Add Zabbix repository
+          apt_repository:
+            repo: "deb http://repo.zabbix.com/zabbix/5.0/ubuntu {{ ansible_distribution_version }} main"
+            state: present
+        - name: Install Zabbix agent
+          apt:
+            name: zabbix-agent
+            state: present
+        - name: Configure Zabbix agent
+          lineinfile:
+            path: /etc/zabbix/zabbix_agentd.conf
+            regexp: "{{ item.regexp }}"
+            line: "{{ item.line }}"
+          loop:
+            - { regexp: '^Server=', line: 'Server=10.103.3.183,10.104.48.51' }
+            - { regexp: '^ServerActive=', line: 'ServerActive=10.103.3.183,10.104.48.51' }
+      when: ansible_os_family == 'Debian'
+
+# Templates
+- name: Templates
+  hosts: all
+  become: true
+  tasks:
+    - name: Deploy chrony.conf template
+      template:
+        src: chrony.conf.j2
+        dest: /etc/chrony.conf
+      when: false  # Placeholder for structure
+
+    - name: Deploy resolv.conf template
+      template:
+        src: resolv.conf.j2
+        dest: /etc/resolv.conf
+      when: false  # Placeholder for structure
+
+# Template content (stored in roles/common/templates/)
+# chrony.conf.j2
+server ntp0.corp.jitb.net iburst
+server ntp1.corp.jitb.net iburst
+allow ntp0.corp.jitb.net
+allow ntp1.corp.jitb.net
+
+# resolv.conf.j2
+search corp.jitb.net
+nameserver 10.104.48.21
+nameserver 10.104.48.22

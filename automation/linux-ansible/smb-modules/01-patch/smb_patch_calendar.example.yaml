@@ -1,0 +1,41 @@
+# SMB Patch Calendar EXAMPLE — not the JITB production calendar
+# Copy to smb_patch_calendar.yaml and edit per customer.
+# Full scheduler engine reference: ../../reference/patch-scheduler-aw2/
+
+timezone: America/New_York   # Chattanooga / Cleveland TN default
+
+mode:
+  testing: true
+  allow_job_ids:
+    - customer_lab_test
+  notify_only: false
+
+zabbix:
+  enabled: false            # set true only if customer has Zabbix
+  api_host: zabbix.example.customer.local
+  user: aai_svc
+  minutes_before: 10
+  duration_minutes: 180
+  collect_data: true
+
+inventory: ./inventory/hosts.ini
+extra_inventories: []
+
+mail:
+  smtp_host: smtp.example.customer.local
+  smtp_port: 25
+  from: automationai-noreply@example.customer.local
+  always_cc: []
+
+contacts:
+  owner: owner@example.customer.local
+  it_lead: it@example.customer.local
+
+# jobs:
+#   - id: customer_lab_test
+#     inventory_group: customer_alpha_linux
+#     weekday: sun
+#     week: first
+#     patch_time: "02:00"
+#     enabled: true
+#     recipients: [owner, it_lead]

@@ -1,0 +1,39 @@
+---
+# Connectivity check for Timekeeping hosts
+#   sudo -u ansible ansible-playbook -i /etc/ansible/hosts /etc/ansible/playbook/timekeeping/ping_timekeeping.yml
+#
+# Uses raw first (works on Solaris without Python), then optional ping module.
+
+- name: Timekeeping SSH connectivity (raw)
+  hosts: PRODTIMEKEEPING
+  gather_facts: false
+  vars:
+    ansible_user: ansible
+  tasks:
+    - name: Who am I / hostname / OS
+      ansible.builtin.raw: |
+        echo "HOST=$(hostname)"
+        echo "USER=$(id)"
+        echo "UNAME=$(uname -a)"
+        echo "DATE=$(date)"
+      register: raw_info
+      changed_when: false
+
+    - name: Show connection result
+      ansible.builtin.debug:
+        msg: "{{ raw_info.stdout_lines }}"
+
+- name: Timekeeping ansible ping module (needs Python on target)
+  hosts: PRODTIMEKEEPING
+  gather_facts: false
+  vars:
+    ansible_user: ansible
+  tasks:
+    - name: Ping module
+      ansible.builtin.ping:
+      register: ping_out
+      ignore_errors: true
+
+    - name: Ping result
+      ansible.builtin.debug:
+        msg: "{{ 'PING_OK' if (ping_out is succeeded) else ('PING_SKIP/FAIL: ' ~ (ping_out.msg | default(ping_out | string))) }}"

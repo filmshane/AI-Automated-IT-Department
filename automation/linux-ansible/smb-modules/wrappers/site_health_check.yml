@@ -1,0 +1,5 @@
+---
+- name: RAM/CPU check
+  ansible.builtin.import_playbook: ../05-health/check-ram-cpu2.yml
+- name: Secure boot status
+  ansible.builtin.import_playbook: ../05-health/secure_boot_status.yaml

@@ -1,0 +1,16 @@
+---
+- name: Join Linux Server to Windows AD Domain
+  hosts: all
+  become: yes
+  vars:
+    ad_domain: "corp.jitb.net"
+      #    ad_user: "sanapm"
+      #ad_password: "YourStrongPassword"  # You can use Ansible Vault for this
+      #computer_ou: "OU=LinuxServers,DC=example,DC=com"
+
+  tasks:
+    - name: Add line after [mysection]
+      lineinfile:
+        path: "/etc/sssd/sssd.conf"
+        line: "default_domain_suffix = corp.jitb.net"
+        insertafter: "services = nss, pam"

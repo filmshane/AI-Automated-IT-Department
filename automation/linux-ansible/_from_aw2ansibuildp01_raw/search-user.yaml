@@ -1,0 +1,114 @@
+---
+- name: Find UserID by First and Last Name across all servers
+  hosts: all
+  gather_facts: false
+  vars:
+    first_name: "John"   # ← Change to the real first name
+    last_name: "Doe"     # ← Change to the real last name
+  tasks:
+    - name: Remove any old report file
+      delegate_to: localhost
+      run_once: true
+      file:
+        path: /tmp/user_report.csv
+        state: absent
+
+    - name: Create new CSV report with header
+      delegate_to: localhost
+      run_once: true
+      copy:
+        dest: /tmp/user_report.csv
+        content: "Server,UserID\n"
+
+    - name: Search /etc/passwd for users whose GECOS field contains both names (case-insensitive)
+      command: >-
+        awk -F: -v fname="{{ first_name }}" -v lname="{{ last_name }}"
+        'BEGIN {IGNORECASE=1} $5 ~ fname && $5 ~ lname {print $1}' /etc/passwd
+      register: userid
+      changed_when: false
+
+    - name: Decide what to report for this host (exactly one match → userid, zero → not_found, more than one → multiple_found)
+      set_fact:
+        report_userid: >-
+          {% if userid.stdout_lines | length == 1 %}
+          {{ userid.stdout_lines[0] }}
+          {% elif userid.stdout_lines | length > 1 %}
+          multiple_found
+          {% else %}
+          not_found
+          {% endif %}
+      changed_when: false
+
+    - name: Append this host's result to the CSV report
+      delegate_to: localhost
+      lineinfile:
+        path: /tmp/user_report.csv
+        line: "{{ inventory_hostname }},{{ report_userid }}"
+
+- name: Process the report and generate Excel (Ansible-core 2.11 compatible)
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Count hosts with issues (not_found or multiple_found)
+      shell: tail -n +2 /tmp/user_report.csv | grep -c -E ',(not_found|multiple_found)$'
+      register: issue_count
+      changed_when: false
+
+    - name: Count unique real userids (trimmed output for old Ansible)
+      shell: tail -n +2 /tmp/user_report.csv | cut -d, -f2 | sort -u | wc -l | tr -d '[:space:]'
+      register: unique_count
+      changed_when: false
+
+    - name: If every host has exactly the same userid → output just that userid
+      when: issue_count.stdout | int == 0 and unique_count.stdout | int == 1
+      block:
+        - name: Get the common userid
+          shell: tail -n +2 /tmp/user_report.csv | cut -d, -f2 | head -1
+          register: single_userid
+          changed_when: false
+
+        - name: Display the single matching userid
+          debug:
+            msg: "All servers have the same userid: {{ single_userid.stdout }}"
+
+    - name: Otherwise show the full per-server report
+      when: not (issue_count.stdout | int == 0 and unique_count.stdout | int == 1)
+      block:
+        - name: Read the CSV report
+          shell: cat /tmp/user_report.csv
+          register: full_report
+          changed_when: false
+
+        - name: Display the full report
+          debug:
+            msg: "{{ full_report.stdout_lines }}"
+
+    - name: Create Excel spreadsheet from the CSV data
+      command: >-
+        python3 -c "
+        import openpyxl, csv, os, sys
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'User Report'
+        ws.append(['Server', 'UserID'])
+        csv_path = '/tmp/user_report.csv'
+        if os.path.exists(csv_path):
+            with open(csv_path, 'r') as f:
+                reader = csv.reader(f)
+                next(reader, None)  # skip header
+                for row in reader:
+                    if row:
+                        ws.append(row)
+        try:
+            wb.save('/tmp/user_report.xlsx')
+            print('Excel report created at /tmp/user_report.xlsx')
+        except Exception as e:
+            print('Failed to create Excel (openpyxl may not be installed):', e, file=sys.stderr)
+        "
+      args:
+        creates: /tmp/user_report.xlsx   # idempotent
+
+    - name: Clean up temporary CSV
+      file:
+        path: /tmp/user_report.csv
+        state: absent

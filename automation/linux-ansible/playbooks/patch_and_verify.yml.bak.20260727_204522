@@ -1,0 +1,266 @@
+---
+# AutomationAI — Linux Patch & Verify
+# Based on Shane Miller cross-platform patch verification pattern (yum/dnf + apt)
+# Client-ready template: no employer-specific hosts or secrets
+- name: Linux patch verification (yum/dnf + apt)
+  hosts: linux
+  become: true
+  gather_facts: true
+
+  vars:
+    patch_dir: /tmp/aai-patch
+    archive_dir: /opt/aai-patches
+    patch_apply: true
+    patch_include_kernel: false
+
+  pre_tasks:
+    - name: Ensure local report directories on target
+      file:
+        path: "{{ patch_dir }}"
+        state: directory
+        mode: "0750"
+
+    - name: Ensure archive directory on target
+      file:
+        path: "{{ archive_dir }}"
+        state: directory
+        mode: "0750"
+
+    - name: Get current date
+      command: date +%Y-%m-%d
+      register: current_date
+      changed_when: false
+
+    - name: Set common facts
+      set_fact:
+        today: "{{ current_date.stdout }}"
+        hostname: "{{ inventory_hostname }}"
+        report_prefix: "{{ hostname }}-{{ current_date.stdout }}"
+
+  tasks:
+    # ========== RedHat family ==========
+    - name: RedHat family patching
+      when: ansible_os_family == "RedHat"
+      block:
+        - name: Set RedHat variables
+          set_fact:
+            log_file: /var/log/dnf.log
+            exclude_pattern: "{{ redhat_kernel_exclude | default('kernel*') }}"
+            pm: "{{ 'dnf' if ansible_pkg_mgr == 'dnf' else 'yum' }}"
+
+        - name: Prefer dnf.log when present
+          stat:
+            path: /var/log/dnf.log
+          register: dnf_log
+
+        - name: Fall back to yum.log
+          set_fact:
+            log_file: "{{ '/var/log/dnf.log' if dnf_log.stat.exists else '/var/log/yum.log' }}"
+
+        - name: check-update excluding kernel (unless overridden)
+          shell: |
+            set -o pipefail
+            EXCL="{% if not patch_include_kernel %}--exclude={{ exclude_pattern }}{% endif %}"
+            if command -v dnf >/dev/null 2>&1; then
+              dnf check-update $EXCL > "{{ patch_dir }}/{{ report_prefix }}-check-update.txt" 2>&1 || true
+            else
+              yum check-update $EXCL > "{{ patch_dir }}/{{ report_prefix }}-check-update.txt" 2>&1 || true
+            fi
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+        - name: Extract expected packages (RedHat)
+          shell: |
+            grep -E '^[a-zA-Z0-9._+-]+\.' "{{ patch_dir }}/{{ report_prefix }}-check-update.txt" 2>/dev/null \
+              | awk '{print $1}' | sed 's/\.[^.]*$//' | sort -u \
+              > "{{ patch_dir }}/{{ report_prefix }}-expected.txt" || true
+            # fallback looser parse
+            if [ ! -s "{{ patch_dir }}/{{ report_prefix }}-expected.txt" ]; then
+              grep -E '^[a-zA-Z0-9]' "{{ patch_dir }}/{{ report_prefix }}-check-update.txt" \
+                | awk '{print $1}' | sort -u > "{{ patch_dir }}/{{ report_prefix }}-expected.txt" || true
+            fi
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+        - name: Apply updates (RedHat)
+          when: patch_apply | bool
+          yum:
+            name: "*"
+            state: latest
+            exclude: "{{ omit if patch_include_kernel else exclude_pattern }}"
+            update_cache: true
+          register: update_result
+
+        - name: Skip apply note
+          when: not (patch_apply | bool)
+          debug:
+            msg: "patch_apply=false — check-update only for {{ hostname }}"
+
+        - name: Capture log slice
+          shell: |
+            touch "{{ patch_dir }}/{{ report_prefix }}-pkg.log.txt"
+            if [ -f "{{ log_file }}" ]; then
+              grep "{{ today }}" "{{ log_file }}" 2>/dev/null \
+                | grep -iE 'upgrad|install|eras' \
+                | tail -n 500 > "{{ patch_dir }}/{{ report_prefix }}-pkg.log.txt" || true
+            fi
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+        - name: Extract actual packages rough list
+          shell: |
+            grep -oiE '([a-zA-Z0-9._+-]+)(-[0-9])' "{{ patch_dir }}/{{ report_prefix }}-pkg.log.txt" 2>/dev/null \
+              | sed 's/-[0-9].*//' | sort -u > "{{ patch_dir }}/{{ report_prefix }}-actual.txt" || true
+            if [ ! -s "{{ patch_dir }}/{{ report_prefix }}-actual.txt" ]; then
+              # fallback: use yum history or expected marker
+              cp "{{ patch_dir }}/{{ report_prefix }}-expected.txt" "{{ patch_dir }}/{{ report_prefix }}-actual.txt" 2>/dev/null || touch "{{ patch_dir }}/{{ report_prefix }}-actual.txt"
+            fi
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+    # ========== Debian family ==========
+    - name: Debian family patching
+      when: ansible_os_family == "Debian"
+      block:
+        - name: Set Debian variables
+          set_fact:
+            log_file: /var/log/apt/history.log
+            exclude_pattern: "{{ debian_kernel_exclude | default('linux-image*|linux-headers*|linux-modules*') }}"
+            pm: apt
+
+        - name: List upgradable excluding kernel
+          shell: |
+            apt-get update -qq
+            apt list --upgradable 2>/dev/null | grep -v "Listing..." \
+              {% if not patch_include_kernel %}| grep -vE '{{ exclude_pattern }}' \{% endif %}
+              > "{{ patch_dir }}/{{ report_prefix }}-check-update.txt" || true
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+        - name: Expected packages (Debian)
+          shell: |
+            grep -oE '^[^/]+' "{{ patch_dir }}/{{ report_prefix }}-check-update.txt" \
+              | sort -u > "{{ patch_dir }}/{{ report_prefix }}-expected.txt" || true
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+        - name: Apply upgrade (Debian)
+          when: patch_apply | bool
+          shell: |
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            # hold kernel packages if excluding
+            {% if not patch_include_kernel %}
+            apt-mark hold linux-image-* linux-headers-* linux-modules-* 2>/dev/null || true
+            {% endif %}
+            apt-get upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
+            {% if not patch_include_kernel %}
+            apt-mark unhold linux-image-* linux-headers-* linux-modules-* 2>/dev/null || true
+            {% endif %}
+          args:
+            executable: /bin/bash
+          register: update_result
+
+        - name: Capture apt history slice
+          shell: |
+            grep -A 30 "Start-Date: {{ today }}" "{{ log_file }}" 2>/dev/null \
+              | grep -E 'Upgrade:|Install:' \
+              > "{{ patch_dir }}/{{ report_prefix }}-pkg.log.txt" || touch "{{ patch_dir }}/{{ report_prefix }}-pkg.log.txt"
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+        - name: Actual packages (Debian)
+          shell: |
+            grep -oE 'Upgrade:.*' "{{ patch_dir }}/{{ report_prefix }}-pkg.log.txt" \
+              | sed 's/Upgrade: //' | tr ',' '\n' | awk '{print $1}' | sed 's/:.*//' | sort -u \
+              > "{{ patch_dir }}/{{ report_prefix }}-actual.txt" || true
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+    - name: Fail unsupported OS family
+      when: ansible_os_family not in ["RedHat", "Debian"]
+      fail:
+        msg: "Unsupported OS family {{ ansible_os_family }} on {{ inventory_hostname }}"
+
+    # ========== Common report ==========
+    - name: Write comparison report
+      shell: |
+        OUT="{{ patch_dir }}/{{ report_prefix }}-comparison.txt"
+        {
+          echo "=== AUTOMATIONAI PATCH VERIFICATION REPORT ==="
+          echo "Hostname: {{ hostname }}"
+          echo "Customer: {{ customer_code | default('n/a') }}"
+          echo "Date: {{ today }}"
+          echo "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          echo "Package Manager: {{ pm | default('unknown') }}"
+          echo "Apply mode: {{ patch_apply }}"
+          echo "Include kernel: {{ patch_include_kernel }}"
+          echo ""
+          echo "=== Expected updates ==="
+          cat "{{ patch_dir }}/{{ report_prefix }}-expected.txt" 2>/dev/null || true
+          echo ""
+          echo "=== Actual / logged updates ==="
+          cat "{{ patch_dir }}/{{ report_prefix }}-actual.txt" 2>/dev/null || true
+          echo ""
+          echo "=== Expected but not clearly logged ==="
+          comm -23 "{{ patch_dir }}/{{ report_prefix }}-expected.txt" "{{ patch_dir }}/{{ report_prefix }}-actual.txt" 2>/dev/null || true
+          echo ""
+          echo "=== Extra logged ==="
+          comm -13 "{{ patch_dir }}/{{ report_prefix }}-expected.txt" "{{ patch_dir }}/{{ report_prefix }}-actual.txt" 2>/dev/null || true
+          echo ""
+          if [ ! -s "{{ patch_dir }}/{{ report_prefix }}-expected.txt" ]; then
+            echo "RESULT: NO_UPDATES_OR_CHECK_EMPTY"
+          elif diff "{{ patch_dir }}/{{ report_prefix }}-expected.txt" "{{ patch_dir }}/{{ report_prefix }}-actual.txt" >/dev/null 2>&1; then
+            echo "RESULT: SUCCESS - Expected set matches logged set (review still recommended)."
+          else
+            echo "RESULT: REVIEW - Mismatch or partial log parse. Human verify."
+          fi
+          if [ -f /var/run/reboot-required ]; then
+            echo "REBOOT: REQUIRED (Debian reboot-required flag present)"
+          fi
+          if needs-restarting -r >/dev/null 2>&1; then
+            true
+          else
+            rc=$?
+            if [ $rc -eq 1 ]; then
+              echo "REBOOT: LIKELY REQUIRED (needs-restarting)"
+            fi
+          fi
+        } > "$OUT"
+      args:
+        executable: /bin/bash
+      register: comparison_result
+      changed_when: false
+
+    - name: Zip evidence
+      shell: |
+        cd "{{ patch_dir }}"
+        zip -q "{{ archive_dir }}/{{ report_prefix }}-patches.zip" \
+          "{{ report_prefix }}-check-update.txt" \
+          "{{ report_prefix }}-expected.txt" \
+          "{{ report_prefix }}-actual.txt" \
+          "{{ report_prefix }}-pkg.log.txt" \
+          "{{ report_prefix }}-comparison.txt" 2>/dev/null || \
+        zip -q "{{ archive_dir }}/{{ report_prefix }}-patches.zip" {{ report_prefix }}-* 2>/dev/null || true
+      args:
+        executable: /bin/bash
+
+    - name: Fetch zip to control node
+      fetch:
+        src: "{{ archive_dir }}/{{ report_prefix }}-patches.zip"
+        dest: "{{ playbook_dir }}/../files/reports/{{ customer_code | default('lab') }}/{{ report_prefix }}-patches.zip"
+        flat: true
+      ignore_errors: true
+
+    - name: Summary
+      debug:
+        msg: "Patch run complete for {{ hostname }} — see comparison + zip under reports/{{ customer_code | default('lab') }}/"

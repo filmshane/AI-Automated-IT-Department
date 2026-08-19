@@ -1,0 +1,27 @@
+# SANITIZED copy from AW2ANSIBUILDP01:/etc/ansible/playbook (list-package.yaml)
+# For AutomationAI customer product use — review before production.
+# Original employer-specific hosts/domains/secrets stripped or vaulted.
+
+---
+- name: Check if a package is installed on RedHat or Debian
+  hosts: all
+  gather_facts: yes
+  vars:
+    pkg_name: hp-ams
+
+  tasks:
+    - name: Gather installed package facts
+      package_facts:
+        manager: auto
+
+    - name: Check package status
+      debug:
+        msg: "Package {{ pkg_name }} is installed"
+      when: pkg_name in ansible_facts.packages
+
+    - name: Check package NOT installed
+      debug:
+        msg: "Package {{ pkg_name }} is NOT installed"
+      when: pkg_name not in ansible_facts.packages
+
+

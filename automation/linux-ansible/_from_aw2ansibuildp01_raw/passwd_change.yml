@@ -1,0 +1,29 @@
+- name: Change user password on Redhat, Oracle Linux and Ubuntu
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  vars_prompt:
+    - name: "user_name"
+      prompt: "Enter the username to update password for"
+      private: no
+
+    - name: "plain_password"
+      prompt: "Enter the NEW password"
+      private: yes
+
+  vars:
+    password_hash: "{{ plain_password | password_hash('sha512') }}"
+
+  tasks:
+    - name: Ensure user exists
+      user:
+        name: "{{ user_name }}"
+        state: present
+
+    - name: Set password for user
+      user:
+        name: "{{ user_name }}"
+        password: "{{ password_hash }}"
+        update_password: always
+

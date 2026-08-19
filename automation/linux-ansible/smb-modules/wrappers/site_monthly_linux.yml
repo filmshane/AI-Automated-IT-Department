@@ -1,0 +1,15 @@
+---
+# AutomationAI SMB — monthly Linux maintenance bundle
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini smb-modules/wrappers/site_monthly_linux.yml --limit customer_alpha_linux
+#
+# Runs inventory + metrics + patch evidence. Password/AD plays are NOT included (attended only).
+
+- name: Import host inventory report
+  ansible.builtin.import_playbook: ../02-inventory-metrics/host_inventory_report.yml
+
+- name: Import system metrics collection
+  ansible.builtin.import_playbook: ../02-inventory-metrics/collect_system_metrics_smb.yml
+
+- name: Import patch and verify
+  ansible.builtin.import_playbook: ../01-patch/patch_and_verify.yml

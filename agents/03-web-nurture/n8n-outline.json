@@ -1,0 +1,4 @@
+{
+  "name": "AAI Web Lead Nurture",
+  "nodes_idea": ["Webhook form", "CRM upsert", "SMS #1 immediate", "SMS #2 at 2h", "Email at 24h", "LLM intent classify", "Book link or human", "No-show reschedule"]
+}

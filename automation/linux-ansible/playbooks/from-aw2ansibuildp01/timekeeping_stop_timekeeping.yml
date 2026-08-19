@@ -1,0 +1,339 @@
+# SANITIZED copy from AW2ANSIBUILDP01:/etc/ansible/playbook (timekeeping__stop_timekeeping.yml)
+# For AutomationAI customer product use — review before production.
+# Original employer-specific hosts/domains/secrets stripped or vaulted.
+
+---
+# Stop PROD Timekeeping (WBPA1-4, WBPW1-2)
+# WebSphere app servers: sequential stopServer.sh (NOT IE GUI)
+#
+#   ansible-playbook -i inventory_timekeeping.ini stop_timekeeping.yml
+#
+# Login: ansible user (SSH key) + sudo -u wasadmin|cognos|root as needed
+
+- name: STOP plan
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - ansible.builtin.debug:
+        msg: |
+          STOP order:
+            1) Pause scheduler WBPA3 (wbrain)
+            2) sitedown WBPW1/WBPW2 (root)
+            3) Cognos crnctl stop WBPA4 (cognos)
+            4) stopServer each app server (replaces WAS GUI ImmediateStop)
+                 WBPA1: {{ was_servers_wbpa1 | join(', ') }}
+                 WBPA2: {{ was_servers_wbpa2 | join(', ') }}
+            5) wbmail kill WBPA1
+            6) stopNode WBPA1/WBPA2, stopManager WBPA1
+            7) kill leftover WAS processes
+
+##############################################################################
+# 1. Scheduler pause — WBPA3
+##############################################################################
+- name: "1) Pause scheduler (WBPA3)"
+  hosts: tk_wbpa3
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: schedPauseAllJobs.sh as wbrain
+      ansible.builtin.shell: |
+        sudo -u {{ wbrain_user }} sh -c 'cd {{ sched_dir }} && ./schedPauseAllJobs.sh'
+      register: pause_out
+      changed_when: true
+
+    - ansible.builtin.debug:
+        var: pause_out.stdout_lines
+
+##############################################################################
+# 2. Maintenance page
+##############################################################################
+- name: "2) sitedown (WBPW1, WBPW2)"
+  hosts: tk_web
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: Run sitedown.sh as root
+      ansible.builtin.command: sudo /usr/local/bin/sitedown.sh
+      register: sitedown
+      changed_when: true
+
+    - ansible.builtin.debug:
+        var: sitedown.stdout_lines
+
+- name: "2b) Verify maintenance URL"
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - ansible.builtin.debug:
+        msg: "Verify: {{ timekeeping_url }}"
+
+##############################################################################
+# 3. Cognos stop — crnctl (CLI)
+##############################################################################
+- name: "3) Cognos stop via crnctl (WBPA4)"
+  hosts: tk_wbpa4
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: crnctl.sh stop as cognos
+      ansible.builtin.shell: |
+        sudo -u {{ cognos_user }} {{ cognos_crnctl }} stop
+      register: cognos_stop
+      failed_when: false
+      changed_when: "'stopped' in (cognos_stop.stdout | default('') | lower) or cognos_stop.rc == 0"
+
+    - ansible.builtin.debug:
+        msg:
+          - "rc={{ cognos_stop.rc }}"
+          - "{{ cognos_stop.stdout_lines | default([]) }}"
+          - "{{ cognos_stop.stderr_lines | default([]) }}"
+
+    - name: Confirm Cognos not running
+      ansible.builtin.shell: |
+        sudo -u {{ cognos_user }} {{ cognos_crnctl }} isRunning
+      register: cognos_run
+      failed_when: false
+      changed_when: false
+
+    - ansible.builtin.debug:
+        var: cognos_run.stdout_lines
+
+##############################################################################
+# 4. WebSphere Application Servers — stopServer.sh ONE AT A TIME
+#    Replaces: IE https://wbpa1:9043/admin -> ImmediateStop
+##############################################################################
+- name: "4a) stopServer each app server on WBPA1 (Custom01)"
+  hosts: tk_wbpa1
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    # Sequential: Ansible runs loop items one-by-one; set -e fails the play if any stop fails
+    - name: "stopServer {{ item }} (wait for success before next)"
+      ansible.builtin.shell: |
+        set -e
+        BIN="{{ was_node_wbpa1_bin }}"
+        # Profile wrapper sets WAS_USER_SCRIPT then calls /app/WebSphere61/bin/stopServer.sh
+        echo "===== Stopping {{ item }} on $(hostname) ====="
+        sudo -u {{ wasadmin_user }} "$BIN/stopServer.sh" "{{ item }}" \
+          -username "{{ wasadmin_user }}" \
+          -password "{{ wasadmin_password }}"
+        echo "===== stopServer {{ item }} OK ====="
+      args:
+        executable: /bin/bash
+      loop: "{{ was_servers_wbpa1 }}"
+      loop_control:
+        label: "{{ item }}"
+      register: stop_srv_wbpa1
+
+    - name: Show stop results WBPA1
+      ansible.builtin.debug:
+        msg: "{{ item.item }} => rc={{ item.rc }}"
+      loop: "{{ stop_srv_wbpa1.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: serverStatus after app stops (WBPA1)
+      ansible.builtin.shell: |
+        sudo -u {{ wasadmin_user }} {{ was_node_wbpa1_bin }}/serverStatus.sh -all \
+          -username {{ wasadmin_user }} -password '{{ wasadmin_password }}' || true
+      register: status1
+      changed_when: false
+
+    - ansible.builtin.debug:
+        var: status1.stdout_lines
+
+- name: "4b) stopServer each app server on WBPA2 (wbprd21)"
+  hosts: tk_wbpa2
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: "stopServer {{ item }} (wait for success before next)"
+      ansible.builtin.shell: |
+        set -e
+        BIN="{{ was_node_wbpa2_bin }}"
+        echo "===== Stopping {{ item }} on $(hostname) ====="
+        sudo -u {{ wasadmin_user }} "$BIN/stopServer.sh" "{{ item }}" \
+          -username "{{ wasadmin_user }}" \
+          -password "{{ wasadmin_password }}"
+        echo "===== stopServer {{ item }} OK ====="
+      args:
+        executable: /bin/bash
+      loop: "{{ was_servers_wbpa2 }}"
+      loop_control:
+        label: "{{ item }}"
+      register: stop_srv_wbpa2
+
+    - name: Show stop results WBPA2
+      ansible.builtin.debug:
+        msg: "{{ item.item }} => rc={{ item.rc }}"
+      loop: "{{ stop_srv_wbpa2.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: serverStatus after app stops (WBPA2)
+      ansible.builtin.shell: |
+        sudo -u {{ wasadmin_user }} {{ was_node_wbpa2_bin }}/serverStatus.sh -all \
+          -username {{ wasadmin_user }} -password '{{ wasadmin_password }}' || true
+      register: status2
+      changed_when: false
+
+    - ansible.builtin.debug:
+        var: status2.stdout_lines
+
+##############################################################################
+# 4c. Operator verifies STOPPED in WAS console (yes/no) — retry if no
+##############################################################################
+- name: "4c) Operator verify Application Servers STOPPED in console"
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  vars:
+    verify_max_rounds: 5
+    was_stop_verified: false
+  tasks:
+    - name: Interactive verify / re-stop until operator says yes
+      ansible.builtin.include_tasks: tasks/was_console_verify_stop.yml
+      loop: "{{ range(0, verify_max_rounds) | list }}"
+      loop_control:
+        loop_var: verify_round
+      when: not (was_stop_verified | default(false) | bool)
+
+    - name: Require operator confirmation before continuing
+      ansible.builtin.assert:
+        that:
+          - was_stop_verified | default(false) | bool
+        fail_msg: >-
+          Operator did not confirm all WAS application servers are STOPPED
+          after {{ verify_max_rounds }} rounds. Aborting remaining stop steps.
+        success_msg: "Operator confirmed all Application Servers are STOPPED — continuing."
+
+##############################################################################
+# 5. wbmail
+##############################################################################
+- name: "5) Stop wbmail (WBPA1)"
+  hosts: tk_wbpa1
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: Kill wbmail processes as wbrain
+      ansible.builtin.shell: |
+        sudo -u {{ wbrain_user }} sh -c '
+          ps -ef | grep -i wbmail | grep -v grep || true
+          ps -ef | grep -i wbmail | grep -v grep | awk "{print \$2}" | while read pid; do
+            [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+          done
+          sleep 2
+          ps -ef | grep -i wbmail | grep -v grep | awk "{print \$2}" | while read pid; do
+            [ -n "$pid" ] && kill -9 "$pid" 2>/dev/null || true
+          done
+          ps -ef | grep -i wbmail | grep -v grep || echo "no wbmail processes"
+        '
+      args:
+        executable: /bin/bash
+      when: force_kill_leftovers | bool
+      register: wbmail_kill
+
+    - ansible.builtin.debug:
+        var: wbmail_kill.stdout_lines
+
+##############################################################################
+# 6. stopNode + stopManager
+##############################################################################
+- name: "6a) stopNode WBPA1"
+  hosts: tk_wbpa1
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: stopNode.sh Custom01
+      ansible.builtin.shell: |
+        set -e
+        sudo -u {{ wasadmin_user }} {{ was_node_wbpa1_bin }}/stopNode.sh \
+          -username {{ wasadmin_user }} -password '{{ wasadmin_password }}'
+      args:
+        executable: /bin/bash
+      register: stop_node1
+
+    - ansible.builtin.debug:
+        var: stop_node1.stdout_lines
+
+- name: "6b) stopNode WBPA2"
+  hosts: tk_wbpa2
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: stopNode.sh wbprd21 profile
+      ansible.builtin.shell: |
+        set -e
+        sudo -u {{ wasadmin_user }} {{ was_node_wbpa2_bin }}/stopNode.sh \
+          -username {{ wasadmin_user }} -password '{{ wasadmin_password }}'
+      args:
+        executable: /bin/bash
+      register: stop_node2
+
+    - ansible.builtin.debug:
+        var: stop_node2.stdout_lines
+
+- name: "6c) stopManager WBPA1"
+  hosts: tk_wbpa1
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: stopManager.sh Dmgr01
+      ansible.builtin.shell: |
+        set -e
+        sudo -u {{ wasadmin_user }} {{ was_dmgr_bin }}/stopManager.sh \
+          -username {{ wasadmin_user }} -password '{{ wasadmin_password }}'
+      args:
+        executable: /bin/bash
+      register: stop_mgr
+
+    - ansible.builtin.debug:
+        var: stop_mgr.stdout_lines
+##############################################################################
+# 7. Leftover WAS processes
+##############################################################################
+- name: "7) Kill leftover WAS java (WBPA1, WBPA2)"
+  hosts: tk_app_was
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: List / kill WebSphere java as needed
+      ansible.builtin.shell: |
+        ps -ef | grep -i WebSphere | grep -v grep || echo "no WebSphere processes"
+        if [ "{{ force_kill_leftovers }}" = "True" ] || [ "{{ force_kill_leftovers }}" = "true" ]; then
+          ps -ef | grep -i WebSphere | grep -v grep | awk '{print $2}' | while read pid; do
+            [ -n "$pid" ] && sudo kill -9 "$pid" 2>/dev/null || true
+          done
+          ps -ef | grep -i WebSphere | grep -v grep || echo "no WebSphere leftovers"
+        fi
+      args:
+        executable: /bin/bash
+      register: was_left
+
+    - ansible.builtin.debug:
+        var: was_left.stdout_lines
+
+- name: STOP complete
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - ansible.builtin.debug:
+        msg: |
+          Timekeeping STOP finished.
+          WAS GUI was NOT used — stopServer.sh ran per wbprd* server sequentially.
+          OS halt (shutdown -y -i5 -g0) is NOT automated.

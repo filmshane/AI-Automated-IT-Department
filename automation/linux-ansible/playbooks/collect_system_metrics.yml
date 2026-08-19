@@ -1,0 +1,66 @@
+# SANITIZED copy from AW2ANSIBUILDP01:/etc/ansible/playbook (collect_system_metrics.yml)
+# For AutomationAI customer product use — review before production.
+# Original employer-specific hosts/domains/secrets stripped or vaulted.
+
+---
+- name: Collect system metrics (CPU, Disks, Memory, TOP idle, Load) from hosts
+  hosts: hosts
+  gather_facts: true
+  tasks:
+    - name: Get TOP CPU idle % (from top command)
+      shell: top -bn1 | grep '^%Cpu' | awk -F, '{gsub(/[^0-9.]/,"",$4); print $4}'
+      register: top_idle_raw
+      changed_when: false
+
+    - name: Set CPU usage and idle facts
+      set_fact:
+        cpu_idle_pct: "{{ (top_idle_raw.stdout | default('0') | trim | float) | round(1) }}"
+        cpu_usage_pct: "{{ (100 - (top_idle_raw.stdout | default('0') | trim | float)) | round(1) }}"
+
+    - name: Get load average from /proc/loadavg
+      command: cat /proc/loadavg
+      register: load_raw
+      changed_when: false
+
+    - name: Set load average facts
+      set_fact:
+        load_1m: "{{ load_raw.stdout.split()[0] | float | round(2) }}"
+        load_5m: "{{ load_raw.stdout.split()[1] | float | round(2) }}"
+        load_15m: "{{ load_raw.stdout.split()[2] | float | round(2) }}"
+
+    - name: Get memory total and free/available (in MB)
+      shell: free -m | awk 'NR==2 {print $2 "," $7}'
+      register: mem_raw
+      changed_when: false
+
+    - name: Set memory facts
+      set_fact:
+        mem_total_mb: "{{ mem_raw.stdout.split(',')[0] | int }}"
+        mem_free_mb: "{{ mem_raw.stdout.split(',')[1] | int }}"
+
+- name: Generate Grafana-ready CSV (timestamp first, only physical disks)
+  hosts: localhost
+  connection: local
+  run_once: true
+  tasks:
+    - name: Get current timestamp (YYYY-MM-DD HH:MM:SS)
+      set_fact:
+        report_timestamp: "{{ lookup('pipe', 'date +%Y-%m-%d %H:%M:%S') }}"
+
+    - name: Create system_metrics.csv (timestamp first + only physical disks, no tmpfs)
+      template:
+        dest: ./system_metrics.csv
+        mode: '0644'
+        content: |
+          timestamp,hostname,cpu_usage_pct,cpu_idle_pct,load_1m,load_5m,load_15m,mem_total_mb,mem_free_mb,disk_mount_point,disk_total_mb,disk_used_pct,disk_free_pct
+          {% for host in groups['hosts'] | sort %}
+          {% set hv = hostvars[host] %}
+          {% if hv.cpu_usage_pct is defined %}
+          {% for mount in hv.ansible_facts.mounts | default([]) %}
+          {% if mount.fstype != 'tmpfs' %}
+          {{ report_timestamp }},{{ host }},{{ hv.cpu_usage_pct }},{{ hv.cpu_idle_pct }},{{ hv.load_1m }},{{ hv.load_5m }},{{ hv.load_15m }},{{ hv.mem_total_mb }},{{ hv.mem_free_mb }},{{ mount.mount | replace(',', '_') | replace('"', '') | replace(' ', '_') }},{{ (mount.size_total / 1048576) | round(2) }},{{ ((mount.size_total - mount.size_available) / mount.size_total * 100) | round(1) if mount.size_total > 0 else 0 }},{{ (mount.size_available / mount.size_total * 100) | round(1) if mount.size_total > 0 else 0 }}
+          {% endif %}
+          {% endfor %}
+          {% endif %}
+          {% endfor %}
+

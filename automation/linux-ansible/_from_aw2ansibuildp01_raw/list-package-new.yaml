@@ -1,0 +1,45 @@
+---
+- name: Check package installed on RedHat or Debian
+  hosts: all
+  gather_facts: yes
+
+  vars:
+    pkg_name: hp-ams
+
+  tasks:
+
+    - name: Check package on RedHat
+      command: rpm -q {{ pkg_name }}
+      register: rpm_check
+      failed_when: false
+      changed_when: false
+      when: ansible_os_family == "RedHat"
+
+    - name: Check package on Debian
+      command: dpkg -l {{ pkg_name }}
+      register: dpkg_check
+      failed_when: false
+      changed_when: false
+      when: ansible_os_family == "Debian"
+
+    - name: Print result for RedHat
+      debug:
+        msg: "Package {{ pkg_name }} is installed"
+      when: ansible_os_family == "RedHat" and rpm_check.rc == 0
+
+    - name: Print result for Debian
+      debug:
+        msg: "Package {{ pkg_name }} is installed"
+      when: ansible_os_family == "Debian" and dpkg_check.rc == 0
+
+    - name: Print not installed (RedHat)
+      debug:
+        msg: "Package {{ pkg_name }} is NOT installed"
+      when: ansible_os_family == "RedHat" and rpm_check.rc != 0
+
+    - name: Print not installed (Debian)
+      debug:
+        msg: "Package {{ pkg_name }} is NOT installed"
+      when: ansible_os_family == "Debian" and dpkg_check.rc != 0
+
+

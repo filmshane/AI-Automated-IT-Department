@@ -1,0 +1,16 @@
+---
+- name: Check RAM and CPU info using Ansible facts
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Display total RAM and CPU core count
+      debug:
+        msg:
+          - "Total RAM: {{ ansible_memory_mb.real.total }} MB"
+          - "CPU Cores: {{ ansible_processor_count }}"
+          - "CPU Model: {{ ansible_processor[1] | default('N/A') }}"
+          - "Logical Cores (Total): {{ ansible_processor_count }}"
+#          - "Physical Cores per Socket: {{ ansible_processor_cores }}"
+
+
+

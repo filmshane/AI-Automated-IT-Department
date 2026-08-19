@@ -1,0 +1,2 @@
+Invoke-AAIWindowsPatch.ps1 uses PSWindowsUpdate module.
+Prefer winupdate-main.ps1 / Invoke-AAIWinUpdateUnattended.ps1 (COM, no module).

@@ -1,0 +1,35 @@
+---
+- name: Check if user exists on server
+  hosts: all
+  gather_facts: false
+  vars_prompt:
+    - name: username
+      prompt: "Enter the username to search"
+      private: no
+
+  tasks:
+    - name: Get user info
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ username }}"
+      register: user_info
+      ignore_errors: true
+
+    - name: Report user presence
+      ansible.builtin.debug:
+        msg: >-
+          {% if user_info.ansible_facts.getent_passwd[username] is defined %}
+            ✅ User '{{ username }}' exists on {{ inventory_hostname }}.
+          {% else %}
+            ❌ User '{{ username }}' does NOT exist on {{ inventory_hostname }}.
+          {% endif %}
+
+#    - name: Report user presence
+#      ansible.builtin.debug:
+#        msg: >-
+#          {% if user_info is defined and user_info.passwd is defined %}
+#            ✅ User '{{ username }}' exists on {{ inventory_hostname }}.
+#          {% else %}
+#            ❌ User '{{ username }}' does NOT exist on {{ inventory_hostname }}.
+#          {% endif %}
+#

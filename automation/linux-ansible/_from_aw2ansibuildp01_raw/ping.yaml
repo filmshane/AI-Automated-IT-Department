@@ -1,0 +1,7 @@
+---
+- name: Check connectivity to all hosts
+  hosts: all  # Or a specific group like 'webservers'
+  tasks:
+    - name: Ping the host
+      ansible.builtin.ping:
+

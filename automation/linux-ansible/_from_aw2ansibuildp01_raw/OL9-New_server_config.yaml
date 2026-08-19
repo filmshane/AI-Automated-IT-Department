@@ -1,0 +1,306 @@
+---
+- name: Oracle Linux 9 Server Build Playbook
+  hosts: all
+  become: true
+  vars:
+    os_major_version: 9
+    files_base_path: "/etc/ansible/FILES/oraclelinux/{{ os_major_version }}/"
+    cylance_open_driver_pattern: "CylancePROTECTOpenDriver-*.rpm"
+    cylance_driver_pattern: "CylancePROTECTDriver-*.rpm"
+    cylance_protect_pattern: "CylancePROTECT.*.rpm"
+    bigfix_pattern: "BESAgent-*.rpm"
+    zabbix_repo_pattern: "*.repo"
+    zabbix_key_pattern: "RPM-GPG-KEY-ZABBIX-*"
+    log_file: "/var/log/New-server-build-{{ ansible_date_time.date }}-{{ ansible_date_time.time | replace(':', '') }}.txt"
+    user_password_hash: "{{ 'abc123def456test' | password_hash('sha512') }}"
+
+  pre_tasks:
+    - name: Validate input arguments
+      fail:
+        msg: "Missing or invalid argument: {{ item.var }}"
+      when: vars[item.var] is not defined or vars[item.var] == '' or (item.var == 'hostname' and not vars[item.var] | regex_match(item.regex))
+      loop:
+        - { var: 'hostname', regex: '^[a-zA-Z][a-zA-Z0-9-]*$' }
+        - { var: 'system_ip', regex: none }
+        - { var: 'network', regex: none }
+
+    - name: Set system facts
+      set_fact:
+        hostnm: "{{ hostname }}"
+        sysip: "{{ system_ip }}"
+        netwk: "{{ network }}"
+
+    - name: Create log file
+      file:
+        path: "{{ log_file }}"
+        state: touch
+        mode: '0644'
+
+    - name: Log playbook start
+      lineinfile:
+        path: "{{ log_file }}"
+        line: "{{ item }}"
+        create: yes
+      with_items:
+        - "Playbook started at {{ ansible_date_time.iso8601 }}"
+        - "Hostname: {{ hostnm }}"
+        - "System IP: {{ sysip }}"
+        - "Network: {{ netwk }}"
+
+  tasks:
+    - name: Install net-tools
+      package:
+        name: net-tools
+        state: present
+
+    - name: Create user accounts
+      user:
+        name: "{{ item.name }}"
+        groups: "{{ item.groups }}"
+        comment: "{{ item.comment }}"
+        password: "{{ user_password_hash }}"
+        update_password: on_create
+        password_expire_max: 90
+        password_expire_min: 1
+        password_expire_warning: 14
+      loop:
+        - { name: 'millershuxadmin', groups: 'users,wheel', comment: 'Shane Miller - JITB' }
+        - { name: 'sanapmuxadmin', groups: 'users,wheel', comment: 'Manoj Sanap - Mphasis' }
+        - { name: 'mmanikandanuxadmin', groups: 'users,wheel', comment: 'Manikandan M - Mphasis' }
+
+    - name: Update /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ sysip }} {{ hostnm }}.corp.jitb.net {{ hostnm }}"
+        state: present
+
+    - name: Configure /etc/resolv.conf
+      shell: |
+        echo "Configuring DNS..." | tee -a {{ log_file }}
+        if [ ! -f /root/resolv.conf.bak ]; then
+          mv /etc/resolv.conf /root/resolv.conf.bak
+        fi
+        cat > /etc/resolv.conf << 'EOF'
+        search corp.jitb.net
+        nameserver 10.104.48.21
+        nameserver 10.104.48.22
+        EOF
+      args:
+        executable: /bin/bash
+        warn: false  # Suppress warnings for mv if already backed up
+
+    - name: Set hostname
+      shell: |
+        echo "Setting hostname..." | tee -a {{ log_file }}
+        if [ ! -f /root/hostname.bak ]; then
+          mv /etc/hostname /root/hostname.bak
+        fi
+        echo "{{ hostnm }}.corp.jitb.net" > /etc/hostname
+        hostnamectl set-hostname "{{ hostnm }}.corp.jitb.net"
+      args:
+        executable: /bin/bash
+        warn: false
+
+    - name: Install and configure chrony
+      block:
+        - name: Install chrony
+          package:
+            name: chrony
+            state: present
+
+        - name: Wait briefly after chrony installation
+          pause:
+            seconds: 5
+
+        - name: Configure chrony
+          shell: |
+            echo "Installing and configuring chrony..." | tee -a {{ log_file }}
+            sed -i '/^pool /d' /etc/chrony.conf
+            if ! grep -q '^server ntp0.corp.jitb.net' /etc/chrony.conf; then
+              cat >> /etc/chrony.conf << 'EOF'
+            server ntp0.corp.jitb.net iburst
+            server ntp1.corp.jitb.net iburst
+            allow ntp0.corp.jitb.net
+            allow ntp1.corp.jitb.net
+            EOF
+            fi
+          args:
+            executable: /bin/bash
+
+        - name: Enable and start chronyd
+          service:
+            name: chronyd
+            state: started
+            enabled: yes
+
+        - name: Set timezone
+          shell: timedatectl set-timezone "America/Los_Angeles"
+          args:
+            creates: /usr/share/zoneinfo/America/Los_Angeles  # Idempotent check
+
+    - name: Install expect
+      package:
+        name: expect
+        state: present
+
+    - name: Modify /etc/login.defs
+      lineinfile:
+        path: /etc/login.defs
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^PASS_MAX_DAYS', line: 'PASS_MAX_DAYS   90' }
+        - { regexp: '^PASS_MIN_DAYS', line: 'PASS_MIN_DAYS    1' }
+        - { regexp: '^PASS_MIN_LEN', line: 'PASS_MIN_LEN     15' }
+        - { regexp: '^PASS_WARN_AGE', line: 'PASS_WARN_AGE   14' }
+        - { regexp: '^UID_MIN', line: 'UID_MIN                   500' }
+        - { regexp: '^UID_MAX', line: 'UID_MAX                   60000' }
+        - { regexp: '^GID_MIN', line: 'GID_MIN                   500' }
+        - { regexp: '^GID_MAX', line: 'GID_MAX                   60000' }
+
+    - name: Configure /etc/security/pwquality.conf
+      lineinfile:
+        path: /etc/security/pwquality.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^# minlen =', line: 'minlen = 12' }
+        - { regexp: '^# dcredit =', line: 'dcredit = 1' }
+        - { regexp: '^# ucredit =', line: 'ucredit = 1' }
+        - { regexp: '^# lcredit =', line: 'lcredit = 1' }
+        - { regexp: '^# ocredit =', line: 'ocredit = 1' }
+
+    - name: Patch system
+      yum:
+        name: '*'
+        state: latest
+        exclude: kernel
+
+    - name: Disable firewalld
+      shell: |
+        echo "Disabling firewalld..." | tee -a {{ log_file }}
+        systemctl stop firewalld
+        systemctl disable firewalld
+      args:
+        executable: /bin/bash
+      ignore_errors: yes  # In case already disabled
+
+    - name: Disable SELinux
+      selinux:
+        state: disabled
+
+    - name: Find Cylance open driver RPM
+      find:
+        paths: "{{ files_base_path }}"
+        patterns: "{{ cylance_open_driver_pattern }}"
+      register: cylance_open_files
+      delegate_to: localhost
+      run_once: true
+
+    - name: Find Cylance driver RPM
+      find:
+        paths: "{{ files_base_path }}"
+        patterns: "{{ cylance_driver_pattern }}"
+      register: cylance_driver_files
+      delegate_to: localhost
+      run_once: true
+
+    - name: Find Cylance protect RPM
+      find:
+        paths: "{{ files_base_path }}"
+        patterns: "{{ cylance_protect_pattern }}"
+      register: cylance_protect_files
+      delegate_to: localhost
+      run_once: true
+
+    - name: Copy Cylance RPMs to remote
+      copy:
+        src: "{{ item.files[0].path }}"
+        dest: "/tmp/{{ item.files[0].path | basename }}"
+      loop:
+        - "{{ cylance_open_files }}"
+        - "{{ cylance_driver_files }}"
+        - "{{ cylance_protect_files }}"
+
+    - name: Install Cylance
+      yum:
+        name: "/tmp/{{ item.files[0].path | basename }}"
+        state: present
+      loop:
+        - "{{ cylance_open_files }}"
+        - "{{ cylance_driver_files }}"
+        - "{{ cylance_protect_files }}"
+
+    - name: Find BigFix RPM
+      find:
+        paths: "{{ files_base_path }}"
+        patterns: "{{ bigfix_pattern }}"
+      register: bigfix_files
+      delegate_to: localhost
+      run_once: true
+
+    - name: Copy BigFix RPM
+      copy:
+        src: "{{ bigfix_files.files[0].path }}"
+        dest: "/etc/opt/BESClient/BESAgent.rpm"
+        mode: '0775'
+
+    - name: Install BigFix RPM
+      yum:
+        name: "/etc/opt/BESClient/BESAgent.rpm"
+        state: present
+
+    - name: Start BigFix service
+      service:
+        name: besclient
+        state: started
+        enabled: yes
+
+    - name: Find Zabbix repo files
+      find:
+        paths: "{{ files_base_path }}"
+        patterns: "{{ zabbix_repo_pattern }}"
+      register: zabbix_repo_files
+      delegate_to: localhost
+      run_once: true
+
+    - name: Copy Zabbix repo files
+      copy:
+        src: "{{ item.path }}"
+        dest: "/etc/yum.repos.d/{{ item.path | basename }}"
+      loop: "{{ zabbix_repo_files.files }}"
+
+    - name: Find Zabbix key files
+      find:
+        paths: "{{ files_base_path }}"
+        patterns: "{{ zabbix_key_pattern }}"
+      register: zabbix_key_files
+      delegate_to: localhost
+      run_once: true
+
+    - name: Copy Zabbix key files
+      copy:
+        src: "{{ item.path }}"
+        dest: "/etc/pki/rpm-gpg/{{ item.path | basename }}"
+      loop: "{{ zabbix_key_files.files }}"
+
+    - name: Install Zabbix agent
+      yum:
+        name: zabbix-agent
+        state: present
+
+    - name: Configure Zabbix agent
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^Server=', line: 'Server=10.103.3.183,10.104.48.51' }
+        - { regexp: '^ServerActive=', line: 'ServerActive=10.103.3.183,10.104.48.51' }
+
+  post_tasks:
+    - name: Reboot the system
+      reboot:
+        msg: "Reboot initiated by Ansible"
+        reboot_timeout: 300
+---

@@ -1,0 +1,51 @@
+# SANITIZED copy from AW2ANSIBUILDP01:/etc/ansible/playbook (search-name-return-userid.yml)
+# For AutomationAI customer product use — review before production.
+# Original employer-specific hosts/domains/secrets stripped or vaulted.
+
+---
+- name: Search for users by first and last name in GECOS field and generate master report
+  hosts: all
+  gather_facts: false
+  vars:
+    first_name: "{{ first_name }}"  # Pass via --extra-vars 'first_name=John last_name=Doe'
+    last_name: "{{ last_name }}"
+    report_path: /tmp/master_report.txt
+    become: true
+
+  tasks:
+    - name: Create or empty the master report file
+      ansible.builtin.copy:
+        content: ""
+        dest: "{{ report_path }}"
+        force: yes
+      delegate_to: localhost
+      run_once: true
+
+    - name: Add header to master report
+      ansible.builtin.lineinfile:
+        path: "{{ report_path }}"
+        line: "Master user report - Searching GECOS field for '{{ first_name }} {{ last_name }}' (case-insensitive substring match)"
+        insertbefore: BOF
+        create: yes
+      delegate_to: localhost
+      run_once: true
+
+    - name: Find matching users in /etc/passwd (GECOS field containing both names)
+      ansible.builtin.shell: |
+        awk -v fn="{{ first_name | lower }}" -v ln="{{ last_name | lower }}" -F: '
+          index(tolower($5), fn) > 0 && index(tolower($5), ln) > 0 {
+            print $1
+          }
+        ' /etc/passwd |
+        tr '\n' ', ' |
+        sed 's/,$//'
+      args:
+        executable: /bin/bash
+      register: found_users
+      changed_when: false
+
+    - name: Append results to master report
+      ansible.builtin.lineinfile:
+        path: "{{ report_path }}"
+        line: "{{ inventory_hostname }}: {{ found_users.stdout | trim | default('No matching users') }}"
+      delegate_to: localhost
